@@ -1,0 +1,72 @@
+#!/usr/bin/env ruby
+require 'socket'
+require "pp"
+
+class SMTP
+	def initialize(server)
+		@server = server
+		@s = TCPSocket.open(@server, 25)
+		puts @s.gets # print banner
+		if send_wait("HELO someserver")[0] != 250
+			raise "Server does not accept arbibtrary HELO"
+		end
+	end
+
+	def send_wait(cmd)
+		send(cmd)
+		ret = @s.gets
+		puts ret
+		ret = ret.scan(/^(\d*) (.*)$/).flatten
+		ret[0] = ret[0].to_i,
+		ret
+	end
+	def send(cmd)
+		puts cmd
+		@s.puts("#{cmd}\r\n")
+	end
+	def close
+		@s.close
+	end
+	def renew
+		@s.close
+		initialize(@server)
+	end
+end
+
+if ARGV[0]
+	server = ARGV[0]
+else
+	puts <<~USAGE
+		Usage: #{File.basename($0)} <server> [<mail_from> [<rcpt_to> [mailfile]]]
+		Ex.:
+		1. Check if Mail works (+IP reverse lookup, + IP Blacklist)
+		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server valid.eml
+		2. Check for open relay
+		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team benjamin.kellermann@mgm-sp.com valid.eml
+		3. Check if spf is configured correctly:
+		   #{File.basename($0)} <server> someone@gmx.de someone@server valid.eml
+		4. Check if From-Address can be bullshit
+		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server valid.eml
+		5. Check if DMARC is checked
+		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server dmarc-reject.eml
+		6. Check if DKIM is checked
+		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server dkim-reject.eml
+	USAGE
+	exit
+end
+s = SMTP.new(server)
+
+
+
+exit unless ARGV[1]
+exit if (s.send_wait("MAIL FROM: #{ARGV[1]}")[0] >= 500)
+exit unless ARGV[2]
+exit if (s.send_wait("RCPT TO: #{ARGV[2]}")[0] >=500)
+exit unless ARGV[3]
+s.send_wait("data")[0]
+File.open(ARGV[3]).each{|line|
+	s.send(line.strip)
+}
+puts s.send_wait(".")
+puts s.send_wait("QUIT")
+s.close
