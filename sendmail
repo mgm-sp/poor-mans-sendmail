@@ -67,7 +67,7 @@ exit if (s.send_wait("RCPT TO: #{ARGV[2]}")[0] >=400)
 exit unless ARGV[3]
 exit if (s.send_wait("data")[0] >=400)
 File.open(ARGV[3]).each{|line|
-	s.send(line.strip)
+	s.send(line.chomp)
 }
 s.send_wait(".")
 s.send_wait("QUIT")
