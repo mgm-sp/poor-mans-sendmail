@@ -1,7 +1,23 @@
 #!/usr/bin/env ruby
-require 'socket'
 require "pp"
 
+if "DEBUG" != "DEBUG"
+	class TCPSocket
+		def TCPSocket::open(server, port)
+			puts "openssl s_client -starttls smtp -servername #{server} -connect #{server}:#{port}"
+			TCPSocket.new
+		end
+		def gets
+			"250 OK"
+		end
+		def puts s
+		end
+		def close
+		end
+	end
+else
+	require 'socket'
+end
 class SMTP
 	def initialize(server)
 		@server = server
