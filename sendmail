@@ -7,17 +7,17 @@ class SMTP
 		@server = server
 		@s = TCPSocket.open(@server, 25)
 		puts @s.gets # print banner
-		if send_wait("HELO someserver")[0] != 250
-			raise "Server does not accept arbibtrary HELO"
+		if send_wait("HELO alcatraz.mgm-sp.team")[0] != 250
+			raise "Server does not accept HELO"
 		end
 	end
 
 	def send_wait(cmd)
 		send(cmd)
-		ret = @s.gets
-		puts ret
-		ret = ret.scan(/^(\d*) (.*)$/).flatten
-		ret[0] = ret[0].to_i,
+		result = @s.gets
+		puts result
+		ret = result.scan(/^(\d\d\d)(.*)$/).flatten
+		ret[0] = ret[0].to_i
 		ret
 	end
 	def send(cmd)
@@ -59,14 +59,14 @@ s = SMTP.new(server)
 
 
 exit unless ARGV[1]
-exit if (s.send_wait("MAIL FROM: #{ARGV[1]}")[0] >= 500)
+exit if (s.send_wait("MAIL FROM: #{ARGV[1]}")[0] >= 400)
 exit unless ARGV[2]
-exit if (s.send_wait("RCPT TO: #{ARGV[2]}")[0] >=500)
+exit if (s.send_wait("RCPT TO: #{ARGV[2]}")[0] >=400)
 exit unless ARGV[3]
-s.send_wait("data")[0]
+exit if (s.send_wait("data")[0] >=400)
 File.open(ARGV[3]).each{|line|
 	s.send(line.strip)
 }
-puts s.send_wait(".")
-puts s.send_wait("QUIT")
+s.send_wait(".")
+s.send_wait("QUIT")
 s.close
