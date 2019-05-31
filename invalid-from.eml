@@ -1,5 +1,8 @@
 From: invalid <fgibae@gfabefiletpfgiaegb.fglcom>
-To: ben <ben@kellermann.team>
-Subject: test
+To: Benjamin Kellermann <benjamin.kellermann@mgm-sp.com>
+Subject: This mail contains no valid From-Header
 
-test
+This mail tests, if the mail server checks the From-Header of an e-mail.
+The From header of this mail contains a non-existant domain. The
+mailserver should parse it and somehow classify this mail as spam or
+invalid or other.
