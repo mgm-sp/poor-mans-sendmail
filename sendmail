@@ -50,7 +50,7 @@ end
 
 class DummyTCPSocket
 	def DummyTCPSocket::open(server, port)
-		puts "openssl s_client -starttls smtp -servername #{server} -connect #{server}:#{port}"
+		puts "openssl s_client -starttls smtp -servername #{server} -connect #{server}:#{port} -crlf -quiet"
 		DummyTCPSocket.new
 	end
 	def gets
