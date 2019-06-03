@@ -1,29 +1,76 @@
 #!/usr/bin/env ruby
 require "pp"
+require "optparse"
+require 'socket'
 
-if "DEBUG" != "DEBUG"
-	class TCPSocket
-		def TCPSocket::open(server, port)
-			puts "openssl s_client -starttls smtp -servername #{server} -connect #{server}:#{port}"
-			TCPSocket.new
-		end
-		def gets
-			"250 OK"
-		end
-		def puts s
-		end
-		def close
-		end
+$servername = Socket.gethostname
+$dry_run = false
+optpars = OptionParser.new { |opts|
+	YELLOW="\033[33m"
+	NORMAL="\033[0m"
+	opts.banner  = <<~USAGE
+		Usage: #{File.basename($0)} [options] <server> [<mail_from> [<rcpt_to> [mailfile]]]
+		Ex.:
+		#{YELLOW}1. Check if Mail works (+IP reverse lookup, + IP Blacklist)#{NORMAL}
+			 #{File.basename($0)} <server> someone@#{$servername} someone@server valid.eml
+		#{YELLOW}2. Check for open relay#{NORMAL}
+			 #{File.basename($0)} <server> someone@#{$servername} benjamin.kellermann@mgm-sp.com valid.eml
+		#{YELLOW}3. Check if spf is configured correctly:#{NORMAL}
+			 #{File.basename($0)} <server> someone@gmx.de someone@server valid.eml
+		#{YELLOW}4. Check if From-Address can be bullshit#{NORMAL}
+			 #{File.basename($0)} <server> someone@#{$servername} someone@server invalid-from.eml
+		#{YELLOW}5. Check if DMARC is checked#{NORMAL}
+			 #{File.basename($0)} <server> someone@#{$servername} someone@server dmarc-reject.eml
+		#{YELLOW}6. Check if DKIM is checked#{NORMAL}
+			 #{File.basename($0)} <server> someone@#{$servername} someone@server dkim-reject.eml
+	USAGE
+	opts.separator "Options:"
+
+	opts.on('--helo <servername>', "Use <servername> in HELO instead of #{$servername}") {|string|
+		$servername = string
+	}
+
+
+	opts.on('--dry-run', "do not execute commands") {|bool|
+		$dry_run = bool
+	}
+
+	opts.on("-h", "--help", "show this message") {
+		puts opts
+		exit
+	}
+}
+
+begin
+	optpars.parse!
+rescue => e
+	puts optpars
+	raise e
+end
+
+class DummyTCPSocket
+	def DummyTCPSocket::open(server, port)
+		puts "openssl s_client -starttls smtp -servername #{server} -connect #{server}:#{port}"
+		DummyTCPSocket.new
 	end
-else
-	require 'socket'
+	def gets
+		"250 DRY-RUN-OK"
+	end
+	def puts s
+	end
+	def close
+	end
 end
 class SMTP
 	def initialize(server)
 		@server = server
-		@s = TCPSocket.open(@server, 25)
+		if $dry_run
+			@s = DummyTCPSocket.open(@server, 25)
+		else
+			@s = TCPSocket.open(@server, 25)
+		end
 		puts @s.gets # print banner
-		if send_wait("HELO alcatraz.mgm-sp.team")[0] != 250
+		if send_wait("HELO #{$servername}")[0] != 250
 			raise "Server does not accept HELO"
 		end
 	end
@@ -52,24 +99,7 @@ end
 if ARGV[0]
 	server = ARGV[0]
 else
-	YELLOW="\033[33m"
-	NORMAL="\033[0m"
-	puts <<~USAGE
-		Usage: #{File.basename($0)} <server> [<mail_from> [<rcpt_to> [mailfile]]]
-		Ex.:
-		#{YELLOW}1. Check if Mail works (+IP reverse lookup, + IP Blacklist)#{NORMAL}
-		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server valid.eml
-		#{YELLOW}2. Check for open relay#{NORMAL}
-		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team benjamin.kellermann@mgm-sp.com valid.eml
-		#{YELLOW}3. Check if spf is configured correctly:#{NORMAL}
-		   #{File.basename($0)} <server> someone@gmx.de someone@server valid.eml
-		#{YELLOW}4. Check if From-Address can be bullshit#{NORMAL}
-		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server invalid-from.eml
-		#{YELLOW}5. Check if DMARC is checked#{NORMAL}
-		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server dmarc-reject.eml
-		#{YELLOW}6. Check if DKIM is checked#{NORMAL}
-		   #{File.basename($0)} <server> ben@alcatraz.mgm-sp.team someone@server dkim-reject.eml
-	USAGE
+	puts optpars
 	exit
 end
 s = SMTP.new(server)
