@@ -1,5 +1,5 @@
 From: invalid <fgibae@gfabefiletpfgiaegb.fglcom>
-To: Benjamin Kellermann <benjamin.kellermann@mgm-sp.com>
+To: <INSERT-TO-VARIABLE>
 Subject: This mail contains no valid From-Header
 
 This mail tests, if the mail server checks the From-Header of an e-mail.

@@ -1,6 +1,6 @@
 From: DKIM-Testing Ben <ben@alcatraz.mgm-sp.team>
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=alcatraz.mgm-sp.team; s=01dkimtest; h=Mime-Version:Content-Type:Date:To:From: Subject:Message-ID:Sender:Reply-To:Cc:Content-Transfer-Encoding:Content-ID: Content-Description:Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc :Resent-Message-ID:In-Reply-To:References:List-Id:List-Help:List-Unsubscribe: List-Subscribe:List-Post:List-Owner:List-Archive; bh=zmK1TFVdNxejXl1f7eoudQjb+29HcRM5X5PqUWy/83s=; b=E9rrF+wqIqUxFOJziriyZ/OnD5 J9ivhl0Nti/cKxOGgo53C2oi+5oyuM/eyxzEkg/8IJdAZ0xqSjWml7BQLBDHFXR9IWqY3/6kudli8 08SgQmnQXk2lJRzJSPAxvcyjuRNYnES5N99uRKPUQjS316/fVfiUdYOQgRw2A/Ng4awjrbB3ic9sd 9UevS/fPcqTD8rkhPekStwZg8DiP2JnkgzZ2HTizPPOUw+bS0QjValKJiIb3coNTZz7Pf7qTQVbnV 07xGipjZ5HsQwcoTTRPcUh9f+EoQiuI/Ck1A9GPrheaCobaAcD6kZ00iiUIuL5VDWeTkhVjAZxr/J HKJFTa+Q==;
-To: Benjamin Kellermann <benjamin.kellermann@mgm-sp.com>
+To: <INSERT-TO-VARIABLE>
 Subject: Mail with invalid DKIM Signature
 
 This mail tests, if DKIM is tested for validity. The mail contains a
