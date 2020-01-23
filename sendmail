@@ -70,9 +70,13 @@ class SMTP
 			@s = TCPSocket.open(@server, 25)
 		end
 		puts "$ nc #{@server} 25"
-		puts @s.gets # print banner
+		banner = @s.gets
+		puts banner
+		if banner.scan(/^(\d\d\d)(.*)$/).flatten[0].to_i >=300
+			exit
+		end
 		if send_wait("HELO #{$servername}")[0] != 250
-			raise "Server does not accept HELO"
+			exit
 		end
 	end
 
