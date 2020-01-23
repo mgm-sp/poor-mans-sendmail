@@ -110,7 +110,9 @@ end
 s = SMTP.new(server)
 
 
-replace = {}
+replace = {
+	"DATE" => Time.now.strftime("%a, %d %b %Y %T %z")
+}
 exit unless ARGV[1]
 replace["FROM"] = ARGV[1]
 exit if (s.send_wait("MAIL FROM: <#{ARGV[1]}>")[0] >= 400)
