@@ -1,0 +1,41 @@
+From: <INSERT-FROM-VARIABLE>
+To: <INSERT-TO-VARIABLE>
+Message-ID: <40bf2839.INSERT-FROM-VARIABLE>
+Content-Type: multipart/mixed; boundary="=-coRYhXON2eS05XAILzko"
+Subject: A test mail to test if the Virus scanner is active
+
+
+--=-coRYhXON2eS05XAILzko
+Content-Type: multipart/alternative; boundary="=-9S6RhxPErSLGxyPKu+u3"
+
+
+--=-9S6RhxPErSLGxyPKu+u3
+Content-Type: text/plain
+Content-Transfer-Encoding: quoted-printable
+
+This is just a testmail which contains the EICAR-Virus test file.
+
+
+--=-9S6RhxPErSLGxyPKu+u3
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html dir=3D"ltr"><head></head><body style=3D"text-align:left; direction:lt=
+r;"><div>This is just a testmail which contains the
+EICAR-Virus test file.</div>
+</body></html>
+
+--=-9S6RhxPErSLGxyPKu+u3--
+
+--=-coRYhXON2eS05XAILzko
+Content-Disposition: attachment; filename="eicar.com"
+Content-Type: application/x-dosexec; charset=binary; name="eicar.com"
+Content-Transfer-Encoding: base64
+
+WDVPIVAlQEFQWzRcUFpYNTQoUF4pN0NDKTd9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNU
+LUZJTEUhJEgrSCoK
+
+
+
+--=-coRYhXON2eS05XAILzko--
+
