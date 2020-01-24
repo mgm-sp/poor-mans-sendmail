@@ -5,6 +5,7 @@ require 'socket'
 
 $servername = Socket.gethostname
 $dry_run = false
+$port = 25
 optpars = OptionParser.new { |opts|
 	YELLOW="\033[33m"
 	NORMAL="\033[0m"
@@ -30,6 +31,9 @@ optpars = OptionParser.new { |opts|
 		$servername = string
 	}
 
+	opts.on('--port <port>', "Use <port> instead of #{$port}") {|integer|
+		$port = integer.to_i
+	}
 
 	opts.on('--dry-run', "do not execute commands") {|bool|
 		$dry_run = bool
@@ -65,11 +69,11 @@ class SMTP
 	def initialize(server)
 		@server = server
 		if $dry_run
-			@s = DummyTCPSocket.open(@server, 25)
+			@s = DummyTCPSocket.open(@server, $port)
 		else
-			@s = TCPSocket.open(@server, 25)
+			@s = TCPSocket.open(@server, $port)
 		end
-		puts "$ nc #{@server} 25"
+		puts "$ nc #{@server} #{$port}"
 		banner = @s.gets
 		puts banner
 		if banner.scan(/^(\d\d\d)(.*)$/).flatten[0].to_i >=300
