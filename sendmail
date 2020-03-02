@@ -124,7 +124,7 @@ exit unless ARGV[2]
 replace["TO"] = ARGV[2]
 exit if (s.send_wait("RCPT TO: <#{ARGV[2]}>")[0] >=400)
 exit unless ARGV[3]
-exit if (s.send_wait("data")[0] >=400)
+exit if (s.send_wait("DATA")[0] >=400)
 File.open(ARGV[3]).each{|line|
 	replace.keys.each{|k|
 		line.gsub!("INSERT-#{k}-VARIABLE",replace[k])
