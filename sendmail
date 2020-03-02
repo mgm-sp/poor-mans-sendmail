@@ -24,6 +24,8 @@ optpars = OptionParser.new { |opts|
 		   #{File.basename($0)} <server> someone@#{$servername} someone@server dmarc-reject.eml
 		#{YELLOW}6. Check if DKIM is checked#{NORMAL}
 		   #{File.basename($0)} <server> someone@#{$servername} someone@server dkim-reject.eml
+		#{YELLOW}7. Check if receipient has a virus scanner in place#{NORMAL}
+		   #{File.basename($0)} <server> someone@#{$servername} someone@server eicar.eml
 	USAGE
 	opts.separator "Options:"
 
