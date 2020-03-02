@@ -1,11 +1,11 @@
-From: DMARC-ignoring Phisher <phishing@paypal.com>
+From: DMARC-ignoring Phisher <phishing@ile-d-if.mgm-sp.team>
 To: <INSERT-TO-VARIABLE>
 Subject: This mail should be rejected due to non-existing DKIM and strict
  DMARC-reject policy
 
 This mail tests, if DMARC is tested for validity. The mail contains no DKIM
-Signature and has a sender address from paypal. Paypal's DMARC Policy
-requires to reject this mail:
+Signature and has a sender address from ile-d-if.mgm-sp.team.
+The DMARC Policy requires to reject this mail:
 
-$ dig +short txt _dmarc.paypal.com
-"v=DMARC1; p=reject; rua=mailto:d@rua.agari.com; ruf=mailto:d@ruf.agari.com"
+$ dig +short txt _dmarc.ile-d-if.mgm-sp.team
+"v=DMARC1; p=reject; rua=mailto:rua@ile-d-if.mgm-sp.team; ruf=mailto:ruf@ile-d-if.mgm-sp.team"

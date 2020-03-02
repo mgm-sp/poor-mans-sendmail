@@ -13,17 +13,17 @@ optpars = OptionParser.new { |opts|
 		Usage: #{File.basename($0)} [options] <server> [<mail_from> [<rcpt_to> [mailfile]]]
 		Ex.:
 		#{YELLOW}1. Check if Mail works (+IP reverse lookup, + IP Blacklist)#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server valid.eml
+		   #{File.basename($0)} <server> someone@#{$servername} someone@server valid.eml
 		#{YELLOW}2. Check for open relay#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} benjamin.kellermann@mgm-sp.com valid.eml
+		   #{File.basename($0)} <server> someone@#{$servername} benjamin.kellermann@mgm-sp.com valid.eml
 		#{YELLOW}3. Check if spf is configured correctly:#{NORMAL}
-			 #{File.basename($0)} <server> someone@gmx.de someone@server valid.eml
+		   #{File.basename($0)} <server> someone@ile-d-if.mgm-sp.team someone@server valid.eml
 		#{YELLOW}4. Check if From-Address can be bullshit#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server invalid-from.eml
+		   #{File.basename($0)} <server> someone@#{$servername} someone@server invalid-from.eml
 		#{YELLOW}5. Check if DMARC is checked#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server dmarc-reject.eml
+		   #{File.basename($0)} <server> someone@#{$servername} someone@server dmarc-reject.eml
 		#{YELLOW}6. Check if DKIM is checked#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server dkim-reject.eml
+		   #{File.basename($0)} <server> someone@#{$servername} someone@server dkim-reject.eml
 	USAGE
 	opts.separator "Options:"
 
