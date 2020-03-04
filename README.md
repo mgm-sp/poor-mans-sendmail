@@ -10,4 +10,4 @@ Run ./sendmail for a short description
 
 Consider using the following command to set-up an smtpd your own.
 
-python -m smtpd -n -c DebuggingServer 0.0.0.0:25
+python -m smtpd -n -d -c DebuggingServer 0.0.0.0:25
