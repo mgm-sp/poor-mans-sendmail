@@ -1,4 +1,6 @@
 From: DMARC-ignoring Phisher <phishing@ile-d-if.mgm-sp.team>
+Content-Type: text/plain
+Date: INSERT-DATE-VARIABLE
 To: <INSERT-TO-VARIABLE>
 Subject: This mail should be rejected due to non-existing DKIM and strict
  DMARC-reject policy
