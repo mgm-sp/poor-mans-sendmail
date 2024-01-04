@@ -15,9 +15,9 @@ optpars = OptionParser.new { |opts|
 		#{YELLOW}1. Check if Mail works (+IP reverse lookup, + IP Blacklist)#{NORMAL}
 			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/valid.eml
 		#{YELLOW}2. Check for open relay#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} benjamin.kellermann@mgm-sp.com examples/valid.eml
+			 #{File.basename($0)} <server> someone@#{$servername} name.lastname@your.external.domain.com examples/valid.eml
 		#{YELLOW}3. Check if spf is configured correctly:#{NORMAL}
-			 #{File.basename($0)} <server> someone@ile-d-if.mgm-sp.team someone@server examples/valid.eml
+			 #{File.basename($0)} <server> someone@spf-fail.mgm-sp.team someone@server examples/valid.eml
 		#{YELLOW}4. Check if From-Address can be bullshit#{NORMAL}
 			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/invalid-from.eml
 		#{YELLOW}5. Check if DMARC is checked#{NORMAL}

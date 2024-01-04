@@ -1,4 +1,4 @@
-From: DMARC-ignoring Phisher <phishing@ile-d-if.mgm-sp.team>
+From: DMARC-ignoring Phisher <benjamin.kellermann@secure.mgm-sp.team>
 Content-Type: text/plain
 Date: INSERT-DATE-VARIABLE
 To: <INSERT-TO-VARIABLE>
@@ -6,8 +6,8 @@ Subject: This mail should be rejected due to non-existing DKIM and strict
  DMARC-reject policy
 
 This mail tests, if DMARC is tested for validity. The mail contains no DKIM
-Signature and has a sender address from ile-d-if.mgm-sp.team.
+Signature and has a sender address from secure.mgm-sp.team.
 The DMARC Policy requires to reject this mail:
 
-$ dig +short txt _dmarc.ile-d-if.mgm-sp.team
-"v=DMARC1; p=reject; rua=mailto:rua@ile-d-if.mgm-sp.team; ruf=mailto:ruf@ile-d-if.mgm-sp.team"
+$ dig +short txt _dmarc.secure.mgm-sp.team
+"v=DMARC1; p=reject; rua=mailto:bk00@was.dev.mgm-tp.com; ruf=mailto:bk00@was.dev.mgm-tp.com; fo=1; pct=100;adkim=s;aspf=r"
