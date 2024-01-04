@@ -6,6 +6,7 @@ require 'socket'
 $servername = Socket.gethostname
 $dry_run = false
 $port = 25
+$print_raw = false
 optpars = OptionParser.new { |opts|
 	YELLOW="\033[33m"
 	NORMAL="\033[0m"
@@ -35,6 +36,10 @@ optpars = OptionParser.new { |opts|
 
 	opts.on('--port <port>', "Use <port> instead of #{$port}") {|integer|
 		$port = integer.to_i
+	}
+
+	opts.on('--print-raw', 'print raw characters like \\n in output') {|bool|
+		$print_raw = bool
 	}
 
 	opts.on('--dry-run', "do not execute commands") {|bool|
@@ -87,7 +92,8 @@ class SMTP
 	end
 
 	def send_wait(cmd)
-		send(cmd)
+		puts cmd
+		send("#{cmd}\r\n")
 		result = @s.gets
 		puts result
 		ret = result.scan(/^(\d\d\d)(.*)$/).flatten
@@ -95,8 +101,7 @@ class SMTP
 		ret
 	end
 	def send(cmd)
-		puts cmd
-		@s.puts("#{cmd}\r\n")
+		@s.puts(cmd)
 	end
 	def close
 		@s.close
@@ -131,7 +136,8 @@ File.open(ARGV[3]).each{|line|
 	replace.keys.each{|k|
 		line.gsub!("INSERT-#{k}-VARIABLE",replace[k])
 	}
-	s.send(line.chomp)
+	puts($print_raw ? line.inspect[1..-2] : line)
+	s.send(line)
 }
 s.send_wait(".")
 s.send_wait("QUIT")
