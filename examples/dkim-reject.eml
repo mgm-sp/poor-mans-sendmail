@@ -4,6 +4,7 @@ DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=alcatraz.mgm-
 To: <INSERT-TO-VARIABLE>
 Date: INSERT-DATE-VARIABLE
 Subject: Mail with invalid DKIM Signature
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
 
 This mail tests, if DKIM is tested for validity. The mail contains a
 DKIM Signature which is invalid. The mailserver should parse it and

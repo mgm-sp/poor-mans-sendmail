@@ -3,6 +3,7 @@ To: <INSERT-TO-VARIABLE>
 Subject: This mail contains no valid From-Header
 Date: INSERT-DATE-VARIABLE
 Content-Type: text/plain
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
 
 This mail tests, if the mail server checks the From-Header of an e-mail.
 The From header of this mail contains a non-existant domain. The

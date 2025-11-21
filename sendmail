@@ -120,9 +120,10 @@ else
 end
 s = SMTP.new(server)
 
-
+current_time = Time.now
 replace = {
-	"DATE" => Time.now.strftime("%a, %d %b %Y %T %z")
+	"DATE" => current_time.strftime("%a, %d %b %Y %T %z"),
+	"MESSAGEID" => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{$servername}"
 }
 exit unless ARGV[1]
 replace["FROM"] = ARGV[1]

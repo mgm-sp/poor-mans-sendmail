@@ -3,6 +3,7 @@ To: <INSERT-TO-VARIABLE>
 Subject: This is just a valid mail
 Date: INSERT-DATE-VARIABLE
 Content-Type: text/plain
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
 
 This is just a testmail which has no DKIM Header but contains a valid
 From-address.
