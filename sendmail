@@ -7,6 +7,7 @@ $servername = Socket.gethostname
 $dry_run = false
 $port = 25
 $print_raw = false
+$maildata = ""
 optpars = OptionParser.new { |opts|
 	YELLOW="\033[33m"
 	NORMAL="\033[0m"
@@ -38,6 +39,9 @@ optpars = OptionParser.new { |opts|
 		$port = integer.to_i
 	}
 
+	opts.on('--maildata <file>', "Set the following file in the mailtemplate to INSERT-MAILDATA-VARIABLE") {|string|
+		$maildata = File.read(string)
+	}
 	opts.on('--print-raw', 'print raw characters like \\n in output') {|bool|
 		$print_raw = bool
 	}
@@ -123,7 +127,8 @@ s = SMTP.new(server)
 current_time = Time.now
 replace = {
 	"DATE" => current_time.strftime("%a, %d %b %Y %T %z"),
-	"MESSAGEID" => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{$servername}"
+	"MESSAGEID" => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{$servername}",
+	"MAILDATA" => $maildata
 }
 exit unless ARGV[1]
 replace["FROM"] = ARGV[1]
