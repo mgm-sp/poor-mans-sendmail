@@ -1,66 +1,68 @@
 #!/usr/bin/env ruby
-require "pp"
-require "optparse"
+# frozen_string_literal: true
+
+require 'pp'
+require 'optparse'
 require 'socket'
 
 $servername = Socket.gethostname
 $dry_run = false
 $port = 25
 $print_raw = false
-$maildata = ""
+$maildata = ''
+YELLOW = "\033[33m"
+NORMAL = "\033[0m"
 optpars = OptionParser.new { |opts|
-	YELLOW="\033[33m"
-	NORMAL="\033[0m"
-	opts.banner  = <<~USAGE
-		Usage: #{File.basename($0)} [options] <server> [<mail_from> [<rcpt_to> [mailfile]]]
+	examples = [
+		['Check if Mail works (+IP reverse lookup, + IP Blacklist)', "someone@#{$servername}", 'someone@server',
+			'examples/valid.eml'],
+		['Check for open relay', "someone@#{$servername}", 'name.lastname@your.external.domain.com', 'examples/valid.eml'],
+		['Check if SPF pass is recognized', 'someone@pass.mail.mgm-sp.team', 'someone@server', 'examples/spf-pass.eml'],
+		['Check if SPF hardfail (-all) is rejected', 'someone@hardfail.mail.mgm-sp.team', 'someone@server',
+			'examples/spf-hardfail.eml'],
+		['Check if SPF softfail (~all) is handled', 'someone@softfail.mail.mgm-sp.team', 'someone@server',
+			'examples/spf-softfail.eml'],
+		['Check if SPF neutral (?all) is handled', 'someone@neutral.mail.mgm-sp.team', 'someone@server',
+			'examples/spf-neutral.eml'],
+		['Check if From-Address can be bullshit', "someone@#{$servername}", 'someone@server', 'examples/invalid-from.eml'],
+		['Check if DMARC reject is checked', "someone@#{$servername}", 'someone@server', 'examples/dmarc-reject.eml'],
+		['Check if DMARC quarantine is checked', "someone@#{$servername}", 'someone@server', 'examples/dmarc-quarantine.eml'],
+		['Check if DKIM is checked', "someone@#{$servername}", 'someone@server', 'examples/dkim-reject.eml'],
+		['Check if SPF pass without alignment and invalid DKIM triggers DMARC reject', 'someone@pass.mail.mgm-sp.team',
+			'someone@server', 'examples/spf-pass-dkim-fail.eml'],
+		['Check if receipient has a virus scanner in place', "someone@#{$servername}", 'someone@server',
+			'examples/eicar.eml']
+	]
+	examples_text = examples.each_with_index.map { |(desc, from, to, file), i|
+		"#{YELLOW}#{i + 1}. #{desc}#{NORMAL}\n\t #{File.basename($PROGRAM_NAME)} <server> #{from} #{to} #{file}"
+	}.join("\n")
+	opts.banner = <<~USAGE
+		Usage: #{File.basename($PROGRAM_NAME)} [options] <server> [<mail_from> [<rcpt_to> [mailfile]]]
 		Ex.:
-		#{YELLOW}1. Check if Mail works (+IP reverse lookup, + IP Blacklist)#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/valid.eml
-		#{YELLOW}2. Check for open relay#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} name.lastname@your.external.domain.com examples/valid.eml
-		#{YELLOW}3. Check if SPF pass is recognized#{NORMAL}
-			 #{File.basename($0)} <server> someone@pass.mail.mgm-sp.team someone@server examples/spf-pass.eml
-		#{YELLOW}4. Check if SPF hardfail (-all) is rejected#{NORMAL}
-			 #{File.basename($0)} <server> someone@hardfail.mail.mgm-sp.team someone@server examples/spf-hardfail.eml
-		#{YELLOW}5. Check if SPF softfail (~all) is handled#{NORMAL}
-			 #{File.basename($0)} <server> someone@softfail.mail.mgm-sp.team someone@server examples/spf-softfail.eml
-		#{YELLOW}6. Check if SPF neutral (?all) is handled#{NORMAL}
-			 #{File.basename($0)} <server> someone@neutral.mail.mgm-sp.team someone@server examples/spf-neutral.eml
-		#{YELLOW}7. Check if From-Address can be bullshit#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/invalid-from.eml
-		#{YELLOW}8. Check if DMARC reject is checked#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/dmarc-reject.eml
-		#{YELLOW}9. Check if DMARC quarantine is checked#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/dmarc-quarantine.eml
-		#{YELLOW}10. Check if DKIM is checked#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/dkim-reject.eml
-		#{YELLOW}11. Check if SPF pass without alignment and invalid DKIM triggers DMARC reject#{NORMAL}
-			 #{File.basename($0)} <server> someone@pass.mail.mgm-sp.team someone@server examples/spf-pass-dkim-fail.eml
-		#{YELLOW}12. Check if receipient has a virus scanner in place#{NORMAL}
-			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/eicar.eml
+		#{examples_text}
 	USAGE
-	opts.separator "Options:"
+	opts.separator 'Options:'
 
-	opts.on('--helo <servername>', "Use <servername> in HELO instead of #{$servername}") {|string|
+	opts.on('--helo <servername>', "Use <servername> in HELO instead of #{$servername}") { |string|
 		$servername = string
 	}
 
-	opts.on('--port <port>', "Use <port> instead of #{$port}") {|integer|
+	opts.on('--port <port>', "Use <port> instead of #{$port}") { |integer|
 		$port = integer.to_i
 	}
 
-	opts.on('--maildata <file>', "Set the following file in the mailtemplate to INSERT-MAILDATA-VARIABLE") {|string|
+	opts.on('--maildata <file>', 'Set the following file in the mailtemplate to INSERT-MAILDATA-VARIABLE') { |string|
 		$maildata = File.read(string)
 	}
-	opts.on('--print-raw', 'print raw characters like \\n in output') {|bool|
+	opts.on('--print-raw', 'print raw characters like \\n in output') { |bool|
 		$print_raw = bool
 	}
 
-	opts.on('--dry-run', "do not execute commands") {|bool|
+	opts.on('--dry-run', 'do not execute commands') { |bool|
 		$dry_run = bool
 	}
 
-	opts.on("-h", "--help", "show this message") {
+	opts.on('-h', '--help', 'show this message') {
 		puts opts
 		exit
 	}
@@ -68,24 +70,28 @@ optpars = OptionParser.new { |opts|
 
 begin
 	optpars.parse!
-rescue => e
+rescue StandardError => e
 	puts optpars
 	raise e
 end
 
 class DummyTCPSocket
-	def DummyTCPSocket::open(server, port)
+	def self.open(server, port)
 		puts "openssl s_client -starttls smtp -servername #{server} -connect #{server}:#{port} -crlf -quiet"
 		DummyTCPSocket.new
 	end
+
 	def gets
-		"250 DRY-RUN-OK"
+		'250 DRY-RUN-OK'
 	end
-	def puts s
+
+	def puts(s)
 	end
+
 	def close
 	end
 end
+
 class SMTP
 	def initialize(server)
 		@server = server
@@ -97,12 +103,8 @@ class SMTP
 		puts "$ nc #{@server} #{$port}"
 		banner = @s.gets
 		puts banner
-		if banner.scan(/^(\d\d\d)(.*)$/).flatten[0].to_i >=300
-			exit
-		end
-		if send_wait("HELO #{$servername}")[0] != 250
-			exit
-		end
+		exit if banner.scan(/^(\d\d\d)(.*)$/).flatten[0].to_i >= 300
+		exit if send_wait("HELO #{$servername}")[0] != 250
 	end
 
 	def send_wait(cmd)
@@ -114,12 +116,15 @@ class SMTP
 		ret[0] = ret[0].to_i
 		ret
 	end
+
 	def send(cmd)
 		@s.puts(cmd)
 	end
+
 	def close
 		@s.close
 	end
+
 	def renew
 		@s.close
 		initialize(@server)
@@ -136,25 +141,25 @@ s = SMTP.new(server)
 
 current_time = Time.now
 replace = {
-	"DATE" => current_time.strftime("%a, %d %b %Y %T %z"),
-	"MESSAGEID" => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{$servername}",
-	"MAILDATA" => $maildata
+	'DATE' => current_time.strftime('%a, %d %b %Y %T %z'),
+	'MESSAGEID' => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{$servername}",
+	'MAILDATA' => $maildata
 }
 exit unless ARGV[1]
-replace["FROM"] = ARGV[1]
-exit if (s.send_wait("MAIL FROM: <#{ARGV[1]}>")[0] >= 400)
+replace['FROM'] = ARGV[1]
+exit if s.send_wait("MAIL FROM: <#{ARGV[1]}>")[0] >= 400
 exit unless ARGV[2]
-replace["TO"] = ARGV[2]
-exit if (s.send_wait("RCPT TO: <#{ARGV[2]}>")[0] >=400)
+replace['TO'] = ARGV[2]
+exit if s.send_wait("RCPT TO: <#{ARGV[2]}>")[0] >= 400
 exit unless ARGV[3]
-exit if (s.send_wait("DATA")[0] >=400)
-File.open(ARGV[3]).each{|line|
-	replace.keys.each{|k|
-		line.gsub!("INSERT-#{k}-VARIABLE",replace[k])
+exit if s.send_wait('DATA')[0] >= 400
+File.open(ARGV[3]).each { |line|
+	replace.each_key { |k|
+		line.gsub!("INSERT-#{k}-VARIABLE", replace[k])
 	}
 	puts($print_raw ? line.inspect[1..-2] : line)
 	s.send(line)
 }
-s.send_wait(".")
-s.send_wait("QUIT")
+s.send_wait('.')
+s.send_wait('QUIT')
 s.close
