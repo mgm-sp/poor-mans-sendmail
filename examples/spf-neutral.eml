@@ -1,0 +1,18 @@
+From: SPF-Neutral Tester <INSERT-FROM-VARIABLE>
+Content-Type: text/plain
+Date: INSERT-DATE-VARIABLE
+To: <INSERT-TO-VARIABLE>
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Subject: This mail has a neutral SPF result (?all)
+
+This mail tests how the receiving server handles a neutral SPF result.
+
+This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+
+The sender domain has a neutral SPF policy:
+
+$ dig +short txt neutral.mail.mgm-sp.team
+"v=spf1 a:ile-d-if.mgm-sp.team ?all"
+
+The ?all mechanism results in a neutral SPF outcome for any IP not matching
+ile-d-if.mgm-sp.team. The server should treat this mail as if no SPF record exists.

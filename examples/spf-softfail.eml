@@ -1,0 +1,18 @@
+From: SPF-Softfail Tester <INSERT-FROM-VARIABLE>
+Content-Type: text/plain
+Date: INSERT-DATE-VARIABLE
+To: <INSERT-TO-VARIABLE>
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Subject: This mail should be marked as SPF softfail (~all)
+
+This mail tests if the receiving server handles an SPF softfail correctly.
+
+This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+
+The sender domain has a softfail SPF policy:
+
+$ dig +short txt softfail.mail.mgm-sp.team
+"v=spf1 a:ile-d-if.mgm-sp.team ~all"
+
+The ~all mechanism causes a softfail for any IP not matching ile-d-if.mgm-sp.team.
+Most servers accept the mail but mark it as suspicious.
