@@ -1,6 +1,10 @@
-From: SPF-Pass DKIM-Fail Tester <benjamin.kellermann@reject.mail.mgm-sp.team>
+From: SPF-Pass DKIM-Fail Tester <ben.tester@reject.mail.mgm-sp.team>
 Content-Type: text/plain
-DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=reject.mail.mgm-sp.team; s=01dkimtest; h=Content-Type:Date:To:From:Subject:Message-ID; bh=zmK1TFVdNxejXl1f7eoudQjb+29HcRM5X5PqUWy/83s=; b=invalidsignatureinvalidsignatureinvalidsignatureinvalidsignature==;
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt;
+ c=relaxed/relaxed; d=reject.mail.mgm-sp.team; s=01dkimtest;
+ h=Content-Type:Date:To:From:Subject:Message-ID;
+ bh=zmK1TFVdNxejXl1f7eoudQjb+29HcRM5X5PqUWy/83s=;
+ b=invalidsignatureinvalidsignatureinvalidsignatureinvalidsignature==;
 Date: INSERT-DATE-VARIABLE
 To: <INSERT-TO-VARIABLE>
 Message-ID: <INSERT-MESSAGEID-VARIABLE>

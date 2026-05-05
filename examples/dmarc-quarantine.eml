@@ -1,9 +1,10 @@
-From: DMARC-ignoring Phisher <benjamin.kellermann@quarantine.mail.mgm-sp.team>
+From: DMARC-ignoring Phisher <ben.tester@reject.mail.mgm-sp.team>
 Content-Type: text/plain
 Date: INSERT-DATE-VARIABLE
 To: <INSERT-TO-VARIABLE>
 Message-ID: <INSERT-MESSAGEID-VARIABLE>
-Subject: This mail should be send to quarantine due to non-existing DKIM and DMARC-quarantine policy
+Subject: This mail should be send to quarantine due to non-existing DKIM
+ and DMARC-quarantine policy
 
 This mail tests, if DMARC is tested for validity. The mail contains no DKIM
 Signature and has a sender address from quarantine.mail.mgm-sp.team.
@@ -11,3 +12,5 @@ The DMARC Policy requires to quarantine this mail:
 
 $ dig txt _dmarc.quarantine.mail.mgm-sp.team
 _dmarc.quarantine.mail.mgm-sp.team. 600	IN TXT	"v=DMARC1; p=quarantine;"
+
+This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>

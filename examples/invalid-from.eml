@@ -9,3 +9,5 @@ This mail tests, if the mail server checks the From-Header of an e-mail.
 The From header of this mail contains a non-existant domain. The
 mailserver should parse it and somehow classify this mail as spam or
 invalid or other.
+
+This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
