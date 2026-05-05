@@ -30,6 +30,8 @@ optpars = OptionParser.new { |opts|
 		['Check if DKIM is checked', "someone@#{$servername}", 'someone@server', 'examples/dkim-reject.eml'],
 		['Check if SPF pass without alignment and invalid DKIM triggers DMARC reject', 'someone@pass.mail.mgm-sp.team',
 			'someone@server', 'examples/spf-pass-dkim-fail.eml'],
+		['Check if SPF pass without alignment and missing DKIM triggers DMARC reject', 'someone@pass.mail.mgm-sp.team',
+			'someone@server', 'examples/dmarc-reject.eml'],
 		['Check if receipient has a virus scanner in place', "someone@#{$servername}", 'someone@server',
 			'examples/eicar.eml']
 	]
