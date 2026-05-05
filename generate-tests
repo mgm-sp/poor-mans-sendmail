@@ -1,0 +1,174 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'open3'
+require 'resolv'
+require 'socket'
+require 'fileutils'
+
+def ask(prompt, default = nil)
+	loop {
+		print default ? "#{prompt} [#{default}]: " : "#{prompt}: "
+		input = ($stdin.gets || '').chomp
+		result = input.empty? ? default : input
+		return result if result && !result.empty?
+
+		puts '  (required)'
+	}
+end
+
+def org_domain(domain)
+	domain.split('.').last(2).join('.')
+end
+
+def dig_txt(name)
+	out, = Open3.capture2('dig', '+short', 'txt', name, err: File::NULL)
+	out.strip
+end
+
+def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain)
+	errors = []
+
+	spf_pass_record = dig_txt(spf_pass)
+	if !spf_pass_record.include?('v=spf1')
+		errors << "#{spf_pass}: no SPF record found"
+	elsif !spf_pass_record.include?('+all')
+		errors << "#{spf_pass}: SPF record has no '+all' — cannot guarantee pass for arbitrary IPs: #{spf_pass_record}"
+	end
+
+	spf_hardfail_record = dig_txt(spf_hardfail)
+	if !spf_hardfail_record.include?('v=spf1')
+		errors << "#{spf_hardfail}: no SPF record found"
+	elsif !spf_hardfail_record.include?('-all')
+		errors << "#{spf_hardfail}: SPF record has no '-all': #{spf_hardfail_record}"
+	end
+
+	dmarc_record = dig_txt("_dmarc.#{dmarc_reject}")
+	if dmarc_record.empty?
+		errors << "_dmarc.#{dmarc_reject}: no DMARC record found"
+	elsif !dmarc_record.include?('p=reject')
+		errors << "_dmarc.#{dmarc_reject}: DMARC record has no 'p=reject': #{dmarc_record}"
+	end
+
+	dkim_record = dig_txt("01dkimtest._domainkey.#{dkim_domain}")
+	errors << "01dkimtest._domainkey.#{dkim_domain}: no DKIM key found" if dkim_record.empty?
+
+	if (org_domain(spf_pass) == org_domain(dmarc_reject)) && !dmarc_record.include?('aspf=s')
+		errors << "SPF-pass domain (#{spf_pass}) and DMARC-reject domain (#{dmarc_reject}) share " \
+			"the same organizational domain '#{org_domain(dmarc_reject)}'. " \
+			'With relaxed alignment (default), SPF will align and DMARC will pass. ' \
+			"Fix: use a SPF-pass domain from a different org domain, or add aspf=s to _dmarc.#{dmarc_reject}"
+	end
+
+	errors
+end
+
+def dig_refresh(content)
+	content.gsub(/^\$ dig ((?:\+\S+ )*)(\w+) (\S+)\n[^\n]*/) {
+		type = Regexp.last_match(2)
+		name = Regexp.last_match(3)
+		result, = Open3.capture2('dig', '+short', type, name, err: File::NULL)
+		result = result.strip
+		result = '(no record)' if result.empty?
+		"$ dig +short #{type} #{name}\n#{result}"
+	}
+end
+
+def generate_eml(template_path, target_path, substitutions)
+	content = File.read(template_path)
+	substitutions.each { |old, new_val| content.gsub!(old, new_val) }
+	content = dig_refresh(content)
+	File.write(target_path, content)
+	puts "  written: #{target_path}"
+end
+
+# --- Questions ---
+
+rcpt   = ask('Enter a recipient address on the tested server')
+domain = rcpt.split('@').last
+
+mx_hosts = Resolv::DNS.open { |dns|
+	dns.getresources(domain, Resolv::DNS::Resource::IN::MX)
+}.sort_by(&:preference).map { |r| r.exchange.to_s }
+
+if mx_hosts.empty?
+	puts "No MX records found for #{domain}."
+	server = ask('Enter the SMTP server manually')
+else
+	puts "\nMX records for #{domain}:"
+	mx_hosts.each_with_index { |h, i| puts "  #{i + 1}. #{h}" }
+	index  = ask('Select server (number)', '1').to_i - 1
+	index  = index.clamp(0, mx_hosts.size - 1)
+	server = mx_hosts[index]
+end
+
+helo         = ask('HELO hostname', Socket.gethostname)
+spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', 'pass.mail.mgm-sp.team')
+spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              'hardfail.mail.mgm-sp.team')
+dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject;")', 'reject.mail.mgm-sp.team')
+dkim_domain  = ask('Domain with invalid DKIM key configured', 'alcatraz.mgm-sp.team')
+
+# --- DNS Validation ---
+
+puts "\nChecking DNS records..."
+errors = check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain)
+if errors.any?
+	puts '  DNS validation failed:'
+	errors.each { |e| puts "  ✗ #{e}" }
+	exit 1
+else
+	puts '  ✓ all records OK'
+end
+
+# --- Generate EML files ---
+
+dir = server
+FileUtils.mkdir_p(dir)
+puts "\nGenerating EML files in #{dir}/..."
+
+generate_eml(
+	'examples/dmarc-reject.eml',
+	"#{dir}/dmarc-reject.eml",
+	{ 'reject.mail.mgm-sp.team' => dmarc_reject }
+)
+generate_eml(
+	'examples/dkim-reject.eml',
+	"#{dir}/dkim-reject.eml",
+	{ 'alcatraz.mgm-sp.team' => dkim_domain }
+)
+generate_eml(
+	'examples/spf-pass-dkim-fail.eml',
+	"#{dir}/spf-pass-dkim-fail.eml",
+	{
+		'reject.mail.mgm-sp.team' => dmarc_reject,
+		'pass.mail.mgm-sp.team' => spf_pass
+	}
+)
+
+# --- Generate commands ---
+
+base = "./sendmail --helo #{helo} #{server}"
+
+tests = [
+	['check if mail works (+IP reverse lookup, +IP blacklist)',
+		"#{base} someone@#{helo} #{rcpt} examples/valid.eml"],
+	['check if SPF pass is recognized',
+		"#{base} someone@#{spf_pass} #{rcpt} examples/spf-pass.eml"],
+	['check if SPF hardfail (-all) is rejected',
+		"#{base} someone@#{spf_hardfail} #{rcpt} examples/spf-hardfail.eml"],
+	['check if From-Address can be bullshit',
+		"#{base} someone@#{helo} #{rcpt} examples/invalid-from.eml"],
+	['check if DMARC reject is checked (no DKIM, MAIL FROM not aligned)',
+		"#{base} someone@#{helo} #{rcpt} #{dir}/dmarc-reject.eml"],
+	['check if invalid DKIM is rejected',
+		"#{base} someone@#{helo} #{rcpt} #{dir}/dkim-reject.eml"],
+	['check if SPF pass without alignment and invalid DKIM triggers DMARC reject',
+		"#{base} someone@#{spf_pass} #{rcpt} #{dir}/spf-pass-dkim-fail.eml"],
+	['check if SPF pass without alignment and missing DKIM triggers DMARC reject',
+		"#{base} someone@#{spf_pass} #{rcpt} #{dir}/dmarc-reject.eml"],
+	['check if recipient has a virus scanner in place',
+		"#{base} someone@#{helo} #{rcpt} examples/eicar.eml"]
+]
+
+puts
+tests.each { |comment, command| puts "# #{comment}\n#{command}\n\n" }
