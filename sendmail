@@ -28,11 +28,15 @@ optpars = OptionParser.new { |opts|
 			 #{File.basename($0)} <server> someone@neutral.mail.mgm-sp.team someone@server examples/spf-neutral.eml
 		#{YELLOW}7. Check if From-Address can be bullshit#{NORMAL}
 			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/invalid-from.eml
-		#{YELLOW}8. Check if DMARC is checked#{NORMAL}
+		#{YELLOW}8. Check if DMARC reject is checked#{NORMAL}
 			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/dmarc-reject.eml
-		#{YELLOW}9. Check if DKIM is checked#{NORMAL}
+		#{YELLOW}9. Check if DMARC quarantine is checked#{NORMAL}
+			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/dmarc-quarantine.eml
+		#{YELLOW}10. Check if DKIM is checked#{NORMAL}
 			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/dkim-reject.eml
-		#{YELLOW}10. Check if receipient has a virus scanner in place#{NORMAL}
+		#{YELLOW}11. Check if SPF pass without alignment and invalid DKIM triggers DMARC reject#{NORMAL}
+			 #{File.basename($0)} <server> someone@pass.mail.mgm-sp.team someone@server examples/spf-pass-dkim-fail.eml
+		#{YELLOW}12. Check if receipient has a virus scanner in place#{NORMAL}
 			 #{File.basename($0)} <server> someone@#{$servername} someone@server examples/eicar.eml
 	USAGE
 	opts.separator "Options:"

@@ -1,0 +1,19 @@
+From: SPF-Pass DKIM-Fail Tester <benjamin.kellermann@reject.mail.mgm-sp.team>
+Content-Type: text/plain
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=reject.mail.mgm-sp.team; s=01dkimtest; h=Content-Type:Date:To:From:Subject:Message-ID; bh=zmK1TFVdNxejXl1f7eoudQjb+29HcRM5X5PqUWy/83s=; b=invalidsignatureinvalidsignatureinvalidsignatureinvalidsignature==;
+Date: INSERT-DATE-VARIABLE
+To: <INSERT-TO-VARIABLE>
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Subject: This mail has SPF pass but invalid DKIM and DMARC reject policy
+
+This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+
+$ dig +short txt pass.mail.mgm-sp.team
+"v=spf1 a:ile-d-if.mgm-sp.team +all"
+
+SPF passes (+all), but the MAIL FROM domain does not align with the From header.
+The DKIM signature for reject.mail.mgm-sp.team is invalid.
+Since neither SPF alignment nor DKIM passes, DMARC rejects this mail:
+
+$ dig +short txt _dmarc.reject.mail.mgm-sp.team
+"v=DMARC1; p=reject;"
