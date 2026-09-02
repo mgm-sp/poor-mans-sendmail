@@ -106,7 +106,15 @@ helo         = ask('HELO hostname', Socket.gethostname)
 spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', 'pass.mail.mgm-sp.team')
 spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              'hardfail.mail.mgm-sp.team')
 dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject;")', 'reject.mail.mgm-sp.team')
-dkim_domain  = ask('Domain with invalid DKIM key configured', 'alcatraz.mgm-sp.team')
+puts <<~HINT
+ Hint: The DKIM domain needs a TXT record at 01dkimtest._domainkey.<domain>
+ with a public key that does NOT match the private key used in the test EML.
+ Generate one with:
+   openssl genrsa 2048 | openssl rsa -pubout -outform DER | openssl base64 -A
+ Then set the DNS record:
+   01dkimtest._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<generated-key>"
+HINT
+dkim_domain = ask('Domain with invalid DKIM key configured', 'alcatraz.mgm-sp.team')
 
 # --- DNS Validation ---
 
