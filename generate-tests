@@ -102,7 +102,13 @@ else
 	server = mx_hosts[index]
 end
 
-helo         = ask('HELO hostname', Socket.gethostname)
+default_helo = begin
+	ip = UDPSocket.new.tap { |s| s.connect('1.1.1.1', 80) }.addr[3]
+	Resolv.getname(ip).chomp('.')
+rescue StandardError
+	nil
+end || Socket.gethostname
+helo         = ask('HELO hostname', default_helo)
 spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', 'pass.mail.mgm-sp.team')
 spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              'hardfail.mail.mgm-sp.team')
 dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject;")', 'reject.mail.mgm-sp.team')
