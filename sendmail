@@ -150,7 +150,7 @@ IO.popen([PREPROCESS, '--replace', "from=#{ARGV[1]}", '--replace', "to=#{ARGV[2]
 		s.send(line)
 	}
 }
-abort 'preprocess failed' unless $CHILD_STATUS.success?
+abort 'preprocess failed' unless $?.success?
 s.send_wait('.')
 s.send_wait('QUIT')
 s.close
