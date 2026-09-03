@@ -7,4 +7,3 @@ Message-ID: <INSERT-MESSAGEID-VARIABLE>
 
 This is just a testmail which has no DKIM Header.
 This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
-INSERT-MAILDATA-VARIABLE

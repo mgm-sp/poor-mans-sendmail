@@ -5,11 +5,13 @@ require 'pp'
 require 'optparse'
 require 'socket'
 
+SCRIPT_DIR = File.dirname(File.realpath($PROGRAM_NAME))
+PREPROCESS = File.join(SCRIPT_DIR, 'preprocess')
+
 $servername = Socket.gethostname
 $dry_run = false
 $port = 25
 $print_raw = false
-$maildata = ''
 YELLOW = "\033[33m"
 NORMAL = "\033[0m"
 optpars = OptionParser.new { |opts|
@@ -53,9 +55,6 @@ optpars = OptionParser.new { |opts|
 		$port = integer.to_i
 	}
 
-	opts.on('--maildata <file>', 'Set the following file in the mailtemplate to INSERT-MAILDATA-VARIABLE') { |string|
-		$maildata = File.read(string)
-	}
 	opts.on('--print-raw', 'print raw characters like \\n in output') { |bool|
 		$print_raw = bool
 	}
@@ -87,11 +86,9 @@ class DummyTCPSocket
 		'250 DRY-RUN-OK'
 	end
 
-	def puts(s)
-	end
+	def puts(s); end
 
-	def close
-	end
+	def close; end
 end
 
 class SMTP
@@ -141,27 +138,19 @@ else
 end
 s = SMTP.new(server)
 
-current_time = Time.now
-replace = {
-	'DATE' => current_time.strftime('%a, %d %b %Y %T %z'),
-	'MESSAGEID' => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{$servername}",
-	'MAILDATA' => $maildata
-}
 exit unless ARGV[1]
-replace['FROM'] = ARGV[1]
 exit if s.send_wait("MAIL FROM: <#{ARGV[1]}>")[0] >= 400
 exit unless ARGV[2]
-replace['TO'] = ARGV[2]
 exit if s.send_wait("RCPT TO: <#{ARGV[2]}>")[0] >= 400
 exit unless ARGV[3]
 exit if s.send_wait('DATA')[0] >= 400
-File.open(ARGV[3]).each { |line|
-	replace.each_key { |k|
-		line.gsub!("INSERT-#{k}-VARIABLE", replace[k])
+IO.popen([PREPROCESS, '--replace', "from=#{ARGV[1]}", '--replace', "to=#{ARGV[2]}", ARGV[3]], 'r') { |pipe|
+	pipe.each_line { |line|
+		puts($print_raw ? line.inspect[1..-2] : line)
+		s.send(line)
 	}
-	puts($print_raw ? line.inspect[1..-2] : line)
-	s.send(line)
 }
+abort 'preprocess failed' unless $CHILD_STATUS.success?
 s.send_wait('.')
 s.send_wait('QUIT')
 s.close

@@ -1,0 +1,10 @@
+From: <INSERT-FROM-VARIABLE>
+To: <INSERT-TO-VARIABLE>
+Content-Type: text/plain
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=mgm-sp.team; s=rsa-2026; h=Content-Type:Date:To:From:Subject:Message-ID:From:To:Cc:Subject:Date:Message-ID:MIME-Version:References:In-Reply-To:Reply-To:Sender:Resent-To:Content-Type:Content-Transfer-Encoding; bh=FIXME; b=FIXME;
+Date: INSERT-DATE-VARIABLE
+Subject: This is just a valid mail with DKIM Signature
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
+
+This is just a testmail which has several valid DKIM Header.
+This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>

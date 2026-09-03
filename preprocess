@@ -1,0 +1,177 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# {{{ Options
+require 'base64'
+require 'openssl'
+require 'optparse'
+require 'socket'
+
+Options = Struct.new(:replace, :dkim_key)
+options = Options.new
+options.replace  = {}
+options.dkim_key = {}
+
+optparse = OptionParser.new { |opts|
+	opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} [options] <input.eml> [output.eml]"
+	opts.separator 'Options:'
+
+	opts.on('--replace KEY=VALUE', 'Replace INSERT-KEY-VARIABLE with VALUE (repeatable)') { |kv|
+		k, v = kv.split('=', 2)
+		options.replace[k.upcase] = v
+	}
+	opts.on('--dkim-key TYPE=FILE', 'Key file override for algorithm family: rsa or ed25519 (repeatable)') { |kv|
+		type, file = kv.split('=', 2)
+		options.dkim_key[type] = file
+	}
+
+	opts.on('-h', '--help', 'show this message') {
+		puts opts
+		exit
+	}
+}
+
+begin
+	optparse.parse!
+rescue StandardError => e
+	puts optparse
+	raise e
+end
+
+unless ARGV[0]
+	puts optparse
+	exit 1
+end
+
+input_file  = ARGV[0]
+output_file = ARGV[1]
+# }}}
+
+SCRIPT_DIR = File.dirname(File.realpath($PROGRAM_NAME))
+
+# {{{ Variable substitution
+content = File.read(input_file)
+
+current_time = Time.now
+replace = {
+	'DATE' => current_time.strftime('%a, %d %b %Y %T %z'),
+	'MESSAGEID' => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{Socket.gethostname}"
+}
+replace.merge!(options.replace)
+replace.each { |k, v| content.gsub!("INSERT-#{k}-VARIABLE", v) }
+# }}}
+
+# {{{ DKIM signing
+def parse_email(text)
+	text = text.gsub("\r\n", "\n")
+	sep       = text.index("\n\n")
+	head_text = sep ? text[0...sep] : text
+	body      = sep ? text[(sep + 2)..] : ''
+
+	headers = []
+	head_text.each_line { |line|
+		line = line.chomp
+		if line =~ /\A[ \t]/ && headers.any?
+			headers.last[1] += "\n#{line}"
+		elsif (m = line.match(/\A([^:]+):(.*)\z/m))
+			headers << [m[1], m[2]]
+		end
+	}
+	[headers, body]
+end
+
+def relaxed_header(name, value)
+	value = value.gsub(/\r?\n[ \t]+/, ' ').gsub(/[ \t]+/, ' ').strip
+	"#{name.downcase}:#{value}"
+end
+
+def relaxed_body(body)
+	lines = body.split(/\r?\n/, -1).map { |l| l.gsub(/[ \t]+/, ' ').rstrip }
+	lines.pop while lines.last == ''
+	lines.empty? ? "\r\n" : "#{lines.join("\r\n")}\r\n"
+end
+
+def dkim_tag(value, tag)
+	m = value.match(/(?:^|;)\s*#{Regexp.escape(tag)}=([^;]*)/)
+	m&.then { |match| match[1].strip }
+end
+
+def algo_family(algo)
+	case algo
+	when /\Arsa-/ then 'rsa'
+	when /\Aed25519-/ then 'ed25519'
+	end
+end
+
+def sign_dkim(content, dkim_key_overrides)
+	headers, body = parse_email(content)
+
+	return content if headers.none? { |h| h[0].downcase == 'dkim-signature' }
+
+	relaxed = relaxed_body(body)
+	body_hash = {
+		'sha256' => Base64.strict_encode64(OpenSSL::Digest::SHA256.digest(relaxed)),
+		'sha1' => Base64.strict_encode64(OpenSSL::Digest::SHA1.digest(relaxed))
+	}
+
+	headers.each { |name, value|
+		next unless name.downcase == 'dkim-signature'
+
+		algo     = dkim_tag(value, 'a')
+		selector = dkim_tag(value, 's')
+		family   = algo_family(algo)
+		hash_alg = algo.split('-', 2).last
+
+		bh = body_hash.fetch(hash_alg) { abort "preprocess: unknown hash algorithm: #{hash_alg}" }
+		value.gsub!(/bh=[^;]*/, "bh=#{bh}")
+
+		key_file = dkim_key_overrides[family] || File.join(SCRIPT_DIR, "#{selector}.key")
+		unless File.exist?(key_file)
+			abort "preprocess: key not found for algorithm #{algo} (selector #{selector}): #{key_file}"
+		end
+
+		header_list = dkim_tag(value, 'h').to_s.split(':').map(&:strip)
+		# Consume headers from the end so duplicates in h= get distinct instances
+		# (or an empty header for oversigning when no more instances exist)
+		available = headers.dup
+		signing_parts = header_list.filter_map { |h|
+			idx = available.rindex { |hdr| hdr[0].downcase == h.downcase }
+			relaxed_header(*available.delete_at(idx)) if idx
+		}
+		# Append DKIM-Signature with b= empty as required by RFC 6376
+		signing_parts << relaxed_header(name, value.sub(/; b=[^;]*/, '; b='))
+		signing_data = signing_parts.join("\r\n")
+
+		key_pem = File.read(key_file)
+		case algo
+		when 'rsa-sha1'
+			sig = OpenSSL::PKey::RSA.new(key_pem).sign(OpenSSL::Digest.new('SHA1'), signing_data)
+		when 'rsa-sha256'
+			sig = OpenSSL::PKey::RSA.new(key_pem).sign(OpenSSL::Digest.new('SHA256'), signing_data)
+		when 'ed25519-sha256'
+			# RFC 8463 Section 3: "signs the hash with PureEdDSA" — "the hash" is SHA256(signing_data),
+			# consistent with RSA-SHA256 which also signs SHA256(signing_data) via PKCS#1.
+			sig = OpenSSL::PKey.read(key_pem).sign(nil, OpenSSL::Digest::SHA256.digest(signing_data))
+		else
+			sig = abort "preprocess: unsupported DKIM algorithm: #{algo}"
+		end
+
+		value.gsub!(/; b=[^;]*/, "; b=#{Base64.strict_encode64(sig)}")
+	}
+
+	head_text = headers.map { |n, v| "#{n}:#{v}" }.join("\n")
+	"#{head_text}\n\n#{body}"
+end
+
+content = sign_dkim(content, options.dkim_key)
+# }}}
+
+if content.match?(/INSERT-\w+-VARIABLE/)
+	abort "preprocess: unresolved placeholder: #{content.match(/INSERT-\w+-VARIABLE/)[0]}"
+end
+
+if output_file
+	File.write(output_file, content)
+else
+	print content
+end
