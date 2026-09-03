@@ -103,6 +103,18 @@ def algo_family(algo)
 	end
 end
 
+def fold_b64(b64, width: 72)
+	first_max = width - 3  # ' b=' prefix in template continuation line
+	rest_max  = width - 1  # ' ' continuation indent for subsequent lines
+	parts = ["b=#{b64[0, first_max]}"]
+	pos = first_max
+	while pos < b64.length
+		parts << b64[pos, rest_max]
+		pos += rest_max
+	end
+	parts.join("\n ")
+end
+
 def sign_dkim(content, dkim_key_overrides)
 	headers, body = parse_email(content)
 
@@ -123,7 +135,7 @@ def sign_dkim(content, dkim_key_overrides)
 		hash_alg = algo.split('-', 2).last
 
 		bh = body_hash.fetch(hash_alg) { abort "preprocess: unknown hash algorithm: #{hash_alg}" }
-		value.gsub!(/bh=[^;]*/, "bh=#{bh}")
+		value.gsub!(/\bbh=[^;]*/, "bh=#{bh}")
 
 		key_file = dkim_key_overrides[family] || File.join(SCRIPT_DIR, "#{selector}.key")
 		unless File.exist?(key_file)
@@ -131,15 +143,13 @@ def sign_dkim(content, dkim_key_overrides)
 		end
 
 		header_list = dkim_tag(value, 'h').to_s.split(':').map(&:strip)
-		# Consume headers from the end so duplicates in h= get distinct instances
-		# (or an empty header for oversigning when no more instances exist)
 		available = headers.dup
 		signing_parts = header_list.filter_map { |h|
 			idx = available.rindex { |hdr| hdr[0].downcase == h.downcase }
 			relaxed_header(*available.delete_at(idx)) if idx
 		}
-		# Append DKIM-Signature with b= empty as required by RFC 6376
-		signing_parts << relaxed_header(name, value.sub(/; b=[^;]*/, '; b='))
+		unfolded = value.gsub(/\r?\n[ \t]+/, ' ')
+		signing_parts << relaxed_header(name, unfolded.sub(/; b=[^;]*/, '; b='))
 		signing_data = signing_parts.join("\r\n")
 
 		key_pem = File.read(key_file)
@@ -156,7 +166,7 @@ def sign_dkim(content, dkim_key_overrides)
 			sig = abort "preprocess: unsupported DKIM algorithm: #{algo}"
 		end
 
-		value.gsub!(/; b=[^;]*/, "; b=#{Base64.strict_encode64(sig)}")
+		value.gsub!(/\bb=[^;]*/, fold_b64(Base64.strict_encode64(sig)))
 	}
 
 	head_text = headers.map { |n, v| "#{n}:#{v}" }.join("\n")
