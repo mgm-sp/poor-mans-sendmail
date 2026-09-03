@@ -7,10 +7,11 @@ require 'openssl'
 require 'optparse'
 require 'socket'
 
-Options = Struct.new(:replace, :dkim_key)
+Options = Struct.new(:replace, :dkim_key, :force)
 options = Options.new
 options.replace  = {}
 options.dkim_key = {}
+options.force    = false
 
 optparse = OptionParser.new { |opts|
 	opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} [options] <input.eml> [output.eml]"
@@ -23,6 +24,9 @@ optparse = OptionParser.new { |opts|
 	opts.on('--dkim-key TYPE=FILE', 'Key file override for algorithm family: rsa or ed25519 (repeatable)') { |kv|
 		type, file = kv.split('=', 2)
 		options.dkim_key[type] = file
+	}
+	opts.on('--force', 'Treat DKIM errors and unresolved placeholders as warnings instead of aborting') {
+		options.force = true
 	}
 
 	opts.on('-h', '--help', 'show this message') {
@@ -115,7 +119,7 @@ def fold_b64(b64, width: 72)
 	parts.join("\n ")
 end
 
-def sign_dkim(content, dkim_key_overrides)
+def sign_dkim(content, dkim_key_overrides, force: false)
 	headers, body = parse_email(content)
 
 	return content if headers.none? { |h| h[0].downcase == 'dkim-signature' }
@@ -134,13 +138,18 @@ def sign_dkim(content, dkim_key_overrides)
 		family   = algo_family(algo)
 		hash_alg = algo.split('-', 2).last
 
-		bh = body_hash.fetch(hash_alg) { abort "preprocess: unknown hash algorithm: #{hash_alg}" }
-		value.gsub!(/\bbh=[^;]*/, "bh=#{bh}")
-
 		key_file = dkim_key_overrides[family] || File.join(SCRIPT_DIR, "#{selector}.key")
 		unless File.exist?(key_file)
-			abort "preprocess: key not found for algorithm #{algo} (selector #{selector}): #{key_file}"
+			if force
+				warn "preprocess: warning: key not found for algorithm #{algo} (selector #{selector}): #{key_file} -- skipping"
+				next
+			else
+				abort "preprocess: key not found for algorithm #{algo} (selector #{selector}): #{key_file}"
+			end
 		end
+
+		bh = body_hash.fetch(hash_alg) { abort "preprocess: unknown hash algorithm: #{hash_alg}" }
+		value.gsub!(/\bbh=[^;]*/, "bh=#{bh}")
 
 		header_list = dkim_tag(value, 'h').to_s.split(':').map(&:strip)
 		available = headers.dup
@@ -173,11 +182,12 @@ def sign_dkim(content, dkim_key_overrides)
 	"#{head_text}\n\n#{body}"
 end
 
-content = sign_dkim(content, options.dkim_key)
+content = sign_dkim(content, options.dkim_key, force: options.force)
 # }}}
 
 if content.match?(/INSERT-\w+-VARIABLE/)
-	abort "preprocess: unresolved placeholder: #{content.match(/INSERT-\w+-VARIABLE/)[0]}"
+	msg = "preprocess: unresolved placeholder: #{content.match(/INSERT-\w+-VARIABLE/)[0]}"
+	options.force ? warn(msg) : abort(msg)
 end
 
 if output_file

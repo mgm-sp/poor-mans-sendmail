@@ -16,6 +16,11 @@ Run `./sendmail` for a short description.
 sending. `FROM` and `TO` are passed automatically from the command-line
 arguments; all other placeholders must be set via `--replace` if needed.
 
+| Option            | Description                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `--force`         | Passed through to `preprocess`: treat DKIM and placeholder errors as warnings.      |
+| `--no-preprocess` | Send the mail file as-is, skipping variable substitution and DKIM signing entirely. |
+
 ## preprocess
 
 `preprocess` renders an EML template into a ready-to-send message. It is
@@ -29,10 +34,11 @@ Without `output.eml` the result is written to stdout.
 
 **Options**
 
-| Option                 | Description                                                                                                                                  |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--replace KEY=VALUE`  | Replace `INSERT-KEY-VARIABLE` with VALUE (repeatable). Keys are case-insensitive.                                                            |
-| `--dkim-key TYPE=FILE` | Override the key file for algorithm family `rsa` or `ed25519` (repeatable). Default: `<selector>.key` in the same directory as `preprocess`. |
+| Option                 | Description                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--replace KEY=VALUE`  | Replace `INSERT-KEY-VARIABLE` with VALUE (repeatable). Keys are case-insensitive.                                                                |
+| `--dkim-key TYPE=FILE` | Override the key file for algorithm family `rsa` or `ed25519` (repeatable). Default: `<selector>.key` in the same directory as `preprocess`.     |
+| `--force`              | Treat missing DKIM key files and unresolved placeholders as warnings instead of aborting. Affected DKIM headers and placeholders are left as-is. |
 
 **Variable substitution**
 

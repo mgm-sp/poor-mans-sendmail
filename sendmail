@@ -12,6 +12,8 @@ $servername = Socket.gethostname
 $dry_run = false
 $port = 25
 $print_raw = false
+$force = false
+$no_preprocess = false
 YELLOW = "\033[33m"
 NORMAL = "\033[0m"
 optpars = OptionParser.new { |opts|
@@ -61,6 +63,14 @@ optpars = OptionParser.new { |opts|
 
 	opts.on('--dry-run', 'do not execute commands') { |bool|
 		$dry_run = bool
+	}
+
+	opts.on('--force', 'Treat DKIM errors and unresolved placeholders as warnings instead of aborting') {
+		$force = true
+	}
+
+	opts.on('--no-preprocess', 'Send mail file as-is without variable substitution or DKIM signing') {
+		$no_preprocess = true
 	}
 
 	opts.on('-h', '--help', 'show this message') {
@@ -144,13 +154,23 @@ exit unless ARGV[2]
 exit if s.send_wait("RCPT TO: <#{ARGV[2]}>")[0] >= 400
 exit unless ARGV[3]
 exit if s.send_wait('DATA')[0] >= 400
-IO.popen([PREPROCESS, '--replace', "from=#{ARGV[1]}", '--replace', "to=#{ARGV[2]}", ARGV[3]], 'r') { |pipe|
-	pipe.each_line { |line|
+if $no_preprocess
+	File.foreach(ARGV[3]) { |line|
 		puts($print_raw ? line.inspect[1..-2] : line)
 		s.send(line)
 	}
-}
-abort 'preprocess failed' unless $?.success?
+else
+	preprocess_cmd = [PREPROCESS, '--replace', "from=#{ARGV[1]}", '--replace', "to=#{ARGV[2]}"]
+	preprocess_cmd << '--force' if $force
+	preprocess_cmd << ARGV[3]
+	IO.popen(preprocess_cmd, 'r') { |pipe|
+		pipe.each_line { |line|
+			puts($print_raw ? line.inspect[1..-2] : line)
+			s.send(line)
+		}
+	}
+	abort 'preprocess failed' unless $?.success?
+end
 s.send_wait('.')
 s.send_wait('QUIT')
 s.close
