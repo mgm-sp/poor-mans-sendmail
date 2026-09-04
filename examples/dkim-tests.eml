@@ -18,9 +18,7 @@ DKIM-Signature: v=1; a=rsa-sha1; q=dns/txt; c=relaxed/relaxed;
  b=FIXME;
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
  s=rsa-2026; d=mgm-sp.team;
- h=Content-Type:Date:To:From:Subject:Message-ID:From:To:Cc:Subject:Date:
- Message-ID:MIME-Version:References:In-Reply-To:Reply-To:Sender:
- Resent-To:Content-Type:Content-Transfer-Encoding;
+ h=Content-Type:Date:To:From:Subject:Message-ID;
  bh=FIXME;
  b=FIXME;
 Date: INSERT-DATE-VARIABLE
