@@ -1,0 +1,25 @@
+From: attacker@evil.com
+From: <INSERT-FROM-VARIABLE>
+To: <INSERT-TO-VARIABLE>
+Content-Type: text/plain
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
+ s=rsa-2026; d=mgm-sp.team;
+ h=Content-Type:Date:To:From:Subject:Message-ID;
+ bh=FIXME;
+ b=FIXME;
+Date: INSERT-DATE-VARIABLE
+Subject: DKIM From-header injection attack (non-oversigned)
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
+
+This mail demonstrates a From-header injection attack against non-oversigned DKIM.
+
+There are two From: headers. The DKIM signature covers only the bottom one
+(INSERT-FROM-VARIABLE) because RFC 6376 specifies that the last occurrence
+of each header field is signed. DKIM verification therefore passes.
+
+However, some mail clients display the first From: header, showing
+"attacker@evil.com" to the recipient despite the valid DKIM signature.
+
+A correct implementation should reject this mail because RFC 5322 requires
+From to be a singleton header field. With DKIM oversigning (h=From:From),
+the injected header would also invalidate the signature.

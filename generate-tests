@@ -26,7 +26,7 @@ def dig_txt(name)
 	out.strip
 end
 
-def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain)
+def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
 	errors = []
 
 	spf_pass_record = dig_txt(spf_pass)
@@ -48,10 +48,18 @@ def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain)
 		errors << "_dmarc.#{dmarc_reject}: no DMARC record found"
 	elsif !dmarc_record.include?('p=reject')
 		errors << "_dmarc.#{dmarc_reject}: DMARC record has no 'p=reject': #{dmarc_record}"
+	elsif !dmarc_record.include?('adkim=s')
+		errors << "_dmarc.#{dmarc_reject}: no 'adkim=s' — DKIM strict alignment test will not work: #{dmarc_record}"
 	end
 
-	dkim_record = dig_txt("01dkimtest._domainkey.#{dkim_domain}")
-	errors << "01dkimtest._domainkey.#{dkim_domain}: no DKIM key found" if dkim_record.empty?
+	rsa_record = dig_txt('rsa-2026._domainkey.mgm-sp.team')
+	errors << 'rsa-2026._domainkey.mgm-sp.team: no DKIM key found (needed for valid DKIM tests)' if rsa_record.empty?
+
+	ed_record = dig_txt('ed25519-2026._domainkey.mgm-sp.team')
+	errors << 'ed25519-2026._domainkey.mgm-sp.team: no DKIM key found (needed for valid DKIM tests)' if ed_record.empty?
+
+	dkim_record = dig_txt("#{dkim_selector}._domainkey.#{dkim_domain}")
+	errors << "#{dkim_selector}._domainkey.#{dkim_domain}: no DKIM key found (needed for invalid DKIM test)" if dkim_record.empty?
 
 	if (org_domain(spf_pass) == org_domain(dmarc_reject)) && !dmarc_record.include?('aspf=s')
 		errors << "SPF-pass domain (#{spf_pass}) and DMARC-reject domain (#{dmarc_reject}) share " \
@@ -111,21 +119,22 @@ end || Socket.gethostname
 helo         = ask('HELO hostname', default_helo)
 spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', 'pass.mail.mgm-sp.team')
 spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              'hardfail.mail.mgm-sp.team')
-dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject;")', 'reject.mail.mgm-sp.team')
+dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', 'reject.mail.mgm-sp.team')
 puts <<~HINT
- Hint: The DKIM domain needs a TXT record at 01dkimtest._domainkey.<domain>
+ Hint: The DKIM domain needs a TXT record at <selector>._domainkey.<domain>
  with a public key that does NOT match the private key used in the test EML.
  Generate one with:
    openssl genrsa 2048 | openssl rsa -pubout -outform DER | openssl base64 -A
  Then set the DNS record:
-   01dkimtest._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<generated-key>"
+   <selector>._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<generated-key>"
 HINT
-dkim_domain = ask('Domain with invalid DKIM key configured', 'alcatraz.mgm-sp.team')
+dkim_domain   = ask('Domain with invalid DKIM key configured', 'mgm-sp.team')
+dkim_selector = ask('Selector for invalid DKIM key', 'random-rsa')
 
 # --- DNS Validation ---
 
 puts "\nChecking DNS records..."
-errors = check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain)
+errors = check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
 if errors.any?
 	puts '  DNS validation failed:'
 	errors.each { |e| puts "  ✗ #{e}" }
@@ -155,7 +164,8 @@ generate_eml(
 	"#{dir}/spf-pass-dkim-fail.eml",
 	{
 		'reject.mail.mgm-sp.team' => dmarc_reject,
-		'pass.mail.mgm-sp.team' => spf_pass
+		'pass.mail.mgm-sp.team' => spf_pass,
+		'random-rsa' => dkim_selector
 	}
 )
 
@@ -180,6 +190,20 @@ tests = [
 		"#{base} someone@#{spf_pass} #{rcpt} #{dir}/spf-pass-dkim-fail.eml"],
 	['check if SPF pass without alignment and missing DKIM triggers DMARC reject',
 		"#{base} someone@#{spf_pass} #{rcpt} #{dir}/dmarc-reject.eml"],
+	['check if valid DKIM (rsa-sha256 + ed25519-sha256) is accepted',
+		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-valid.eml"],
+	['check if valid DKIM (rsa-sha256 only) is accepted',
+		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-rsa.eml"],
+	['check if valid DKIM (ed25519-sha256 only) is accepted',
+		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-ed25519.eml"],
+	['check if DKIM with rsa-sha1 is rejected (RFC 8301)',
+		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-rsa-sha1.eml"],
+	['check if valid DKIM with strict DMARC alignment failure (adkim=s, subdomain) is rejected',
+		"#{base} someone@#{dmarc_reject} #{rcpt} examples/dkim-dmarc-strict-fail.eml"],
+	['check if valid oversigned DKIM is accepted',
+		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-oversign.eml"],
+	['check if From-header injection (non-oversigned, valid DKIM) is detected',
+		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-from-injection.eml"],
 	['check if recipient has a virus scanner in place',
 		"#{base} someone@#{helo} #{rcpt} examples/eicar.eml"]
 ]

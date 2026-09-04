@@ -1,0 +1,27 @@
+From: <INSERT-FROM-VARIABLE>
+To: <INSERT-TO-VARIABLE>
+Content-Type: text/plain
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
+ s=rsa-2026; d=mgm-sp.team;
+ h=Content-Type:Date:To:From:Subject:Message-ID;
+ bh=FIXME;
+ b=FIXME;
+DKIM-Signature: v=1; a=ed25519-sha256; q=dns/txt; c=relaxed/relaxed;
+ s=ed25519-2026; d=mgm-sp.team;
+ h=Content-Type:Date:To:From:Subject:Message-ID;
+ bh=FIXME;
+ b=FIXME;
+Date: INSERT-DATE-VARIABLE
+Subject: Valid DKIM but strict DMARC alignment failure (adkim=s)
+Message-ID: <INSERT-MESSAGEID-VARIABLE>
+
+This mail has a valid DKIM signature (rsa-sha256 + ed25519-sha256),
+but the DKIM signing domain (d=mgm-sp.team) does not exactly match
+the From domain (INSERT-FROM-VARIABLE).
+
+With relaxed DMARC alignment (adkim=r, the default), this would pass
+because both domains share the same organizational domain.
+
+With strict DMARC alignment (adkim=s), the d= tag must exactly match
+the From domain -- a subdomain is not sufficient. This mail should
+therefore be rejected by a server enforcing adkim=s.
