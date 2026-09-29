@@ -20,6 +20,13 @@ of each header field is signed. DKIM verification therefore passes.
 However, some mail clients display the first From: header, showing
 "attacker@evil.com" to the recipient despite the valid DKIM signature.
 
-A correct implementation should reject this mail because RFC 5322 requires
-From to be a singleton header field. With DKIM oversigning (h=From:From),
-the injected header would also invalidate the signature.
+Countermeasures:
+
+  RFC 5322 requires From to be a singleton header field. RFC 7489 (DMARC)
+  Section 6.6.1 states that messages with multiple From fields are typically
+  rejected; handling of such messages is outside the scope of DMARC, meaning
+  no authentication result is produced and the DMARC policy applies as if
+  authentication failed.
+
+  With DKIM oversigning (h=From:From), an injected From header would also
+  invalidate the signature. Oversigning is described in RFC 6376 Section 5.4.2.

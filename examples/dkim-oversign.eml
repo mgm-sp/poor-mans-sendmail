@@ -10,8 +10,14 @@ DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
  bh=FIXME;
  b=FIXME;
 Date: INSERT-DATE-VARIABLE
-Subject: This is just a valid mail with DKIM Signature
+Subject: This is just a valid mail with DKIM Signature to test
+ oversigning
 Message-ID: <INSERT-MESSAGEID-VARIABLE>
 
 This is just a testmail which has several valid DKIM Header.
+The DKIM-Signature has a lot of additional headers for oversigning
+ h=Content-Type:Date:To:From:Subject:Message-ID:
+ From:To:Cc:Subject:Date:Message-ID:MIME-Version:References:
+ In-Reply-To:Reply-To:Sender:Resent-To:Content-Type:
+ Content-Transfer-Encoding;
 This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
