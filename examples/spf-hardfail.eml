@@ -12,6 +12,6 @@ This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
 The sender domain has a strict SPF policy:
 
 $ dig +short txt INSERT-SPF-HARDFAIL-DOMAIN-VARIABLE
-"v=spf1 a:ile-d-if.mgm-sp.team -all"
+"v=spf1 -all"
 
-The -all mechanism causes a hardfail for any IP not matching ile-d-if.mgm-sp.team.
+The -all mechanism causes a hardfail for any sending IP.

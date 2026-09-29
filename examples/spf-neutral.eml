@@ -12,7 +12,7 @@ This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
 The sender domain has a neutral SPF policy:
 
 $ dig +short txt INSERT-SPF-NEUTRAL-DOMAIN-VARIABLE
-"v=spf1 a:ile-d-if.mgm-sp.team ?all"
+"v=spf1 ?all"
 
-The ?all mechanism results in a neutral SPF outcome for any IP not matching
-ile-d-if.mgm-sp.team. The server should treat this mail as if no SPF record exists.
+The ?all mechanism results in a neutral SPF outcome for any sending IP.
+The server should treat this mail as if no SPF record exists.

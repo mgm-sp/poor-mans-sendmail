@@ -1,7 +1,7 @@
-From: DKIM-Tester <ben.tester@alcatraz.mgm-sp.team>
+From: DKIM-Tester <ben.tester@INSERT-DMARC-NONE-DOMAIN-VARIABLE>
 Content-Type: text/plain
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
- s=nonexistant; d=mgm-sp.team;
+ s=nonexistant; d=INSERT-DKIM-DOMAIN-VARIABLE;
  h=Mime-Version:Content-Type:Date:To:From:Subject:Message-ID:Sender:
  Reply-To:Cc:Content-Transfer-Encoding:Content-ID: Content-Description:
  Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc:
@@ -22,5 +22,8 @@ This mail tests, if DKIM is tested for validity. The mail contains a
 DKIM Signature which is invalid. The mailserver should parse it and
 somehow classify this mail as spam or invalid or other.
 
-There is no DMARC policy for the sender, therefore it is not necessary
-to reject this mail. Some mailserver add a DKIM-Verification Header.
+The DMARC policy for the sender is p=none (monitoring only), therefore
+it is not necessary to reject this mail. Some mailserver add a DKIM-Verification Header.
+
+$ dig txt _dmarc.INSERT-DMARC-NONE-DOMAIN-VARIABLE
+"v=DMARC1; p=none;"

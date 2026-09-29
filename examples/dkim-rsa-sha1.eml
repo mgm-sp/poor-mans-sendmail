@@ -2,7 +2,7 @@ From: <INSERT-FROM-VARIABLE>
 To: <INSERT-TO-VARIABLE>
 Content-Type: text/plain
 DKIM-Signature: v=1; a=rsa-sha1; q=dns/txt; c=relaxed/relaxed;
- s=rsa-2026; d=mgm-sp.team;
+ s=rsa-2026; d=INSERT-DKIM-DOMAIN-VARIABLE;
  h=Content-Type:Date:To:From:Subject:Message-ID;
  bh=FIXME;
  b=FIXME;
