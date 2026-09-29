@@ -155,22 +155,19 @@ exit if s.send_wait("RCPT TO: <#{ARGV[2]}>")[0] >= 400
 exit unless ARGV[3]
 exit if s.send_wait('DATA')[0] >= 400
 if $no_preprocess
-	File.foreach(ARGV[3]) { |line|
-		puts($print_raw ? line.inspect[1..-2] : line)
-		s.send(line)
-	}
+	content = File.read(ARGV[3])
 else
 	preprocess_cmd = [PREPROCESS, '--replace', "from=#{ARGV[1]}", '--replace', "to=#{ARGV[2]}"]
 	preprocess_cmd << '--force' if $force
 	preprocess_cmd << ARGV[3]
-	IO.popen(preprocess_cmd, 'r') { |pipe|
-		pipe.each_line { |line|
-			puts($print_raw ? line.inspect[1..-2] : line)
-			s.send(line)
-		}
-	}
+	content = IO.popen(preprocess_cmd, 'r', &:read)
 	abort 'preprocess failed' unless $?.success?
 end
+content += "\r\n" unless content.end_with?("\r\n")
+content.each_line { |line|
+	puts($print_raw ? line.inspect[1..-2] : line)
+	s.send(line)
+}
 s.send_wait('.')
 s.send_wait('QUIT')
 s.close

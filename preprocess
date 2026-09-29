@@ -29,7 +29,8 @@ optparse = OptionParser.new { |opts|
 	opts.on('--force', 'Treat DKIM errors and unresolved placeholders as warnings instead of aborting') {
 		options.force = true
 	}
-	opts.on('--eval-cmd CMD', 'Re-execute "$ CMD ..." lines in body, replacing output until next blank line (repeatable)') { |cmd|
+	opts.on('--eval-cmd CMD',
+		'Re-execute "$ CMD ..." lines in body, replacing output until next blank line (repeatable)') { |cmd|
 		options.eval_cmds << cmd
 	}
 
@@ -70,22 +71,22 @@ replace.each { |k, v| content.gsub!("INSERT-#{k}-VARIABLE", v) }
 # }}}
 
 # {{{ Command evaluation
-options.eval_cmds.each do |cmd|
-	content.gsub!(/^(\$ #{Regexp.escape(cmd)} [^\r\n]+)(\r?\n)((?:[^\r\n]+\r?\n)*)/) do
-		cmd_text   = $1
-		eol        = $2
-		old_output = $3
+options.eval_cmds.each { |cmd|
+	content.gsub!(/^(\$ #{Regexp.escape(cmd)} [^\r\n]+)(\r?\n)((?:[^\r\n]+\r?\n)*)/) {
+		cmd_text   = Regexp.last_match(1)
+		eol        = Regexp.last_match(2)
+		old_output = Regexp.last_match(3)
 		full_cmd   = cmd_text.sub(/^\$ /, '')
 		begin
 			new_output = IO.popen(full_cmd.split, 'r', err: %i[child out], &:read).chomp
 			new_output.empty? ? "#{cmd_text}#{eol}" : "#{cmd_text}#{eol}#{new_output}#{eol}"
-		rescue => e
+		rescue StandardError => e
 			msg = "preprocess: eval-cmd failed (#{full_cmd}): #{e.message}"
 			options.force ? warn(msg) : abort(msg)
 			"#{cmd_text}#{eol}#{old_output}"
 		end
-	end
-end
+	}
+}
 # }}}
 
 # {{{ DKIM signing

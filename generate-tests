@@ -5,6 +5,53 @@ require 'open3'
 require 'resolv'
 require 'socket'
 require 'fileutils'
+require 'yaml'
+require 'optparse'
+
+# Monkey-patch: map dashed switch names (e.g. --do-something) to underscored keys
+# (do_something) so OptionParser#parse!(into: Struct) can assign them directly.
+module OptparseDashToUnderscore
+	def switch_name
+		super.tr('-', '_')
+	end
+end
+OptionParser::Switch.prepend(OptparseDashToUnderscore)
+
+# {{{ Options
+Options = Struct.new(:regenerate, :init, :list_tests)
+options = Options.new
+options.regenerate = false
+options.init = false
+options.list_tests = false
+
+optparse = OptionParser.new { |opts|
+	opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} <dir> [test-id] [options]"
+	opts.separator 'Options:'
+	opts.on('--[no-]regenerate', 'Regenerate EML even if it already exists')
+	opts.on('--init', '(Re-)initialize: ask questions, validate DNS, save config (no EML generation)')
+	opts.on('--list-tests', 'List all tests with description (no dir required)')
+	opts.on('-h', '--help', 'show this message') {
+		puts opts
+		exit
+	}
+}
+
+begin
+	optparse.parse!(into: options)
+rescue StandardError => e
+	puts optparse
+	raise e
+end
+
+if ARGV.length > 2 || (!options.list_tests && ARGV.empty?)
+	puts optparse
+	exit
+end
+
+dir        = ARGV[0]
+test_id    = ARGV[1]
+config_file = dir && "#{dir}/config.yml"
+# }}}
 
 def ask(prompt, default = nil)
 	loop {
@@ -59,7 +106,9 @@ def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
 	errors << 'ed25519-2026._domainkey.mgm-sp.team: no DKIM key found (needed for valid DKIM tests)' if ed_record.empty?
 
 	dkim_record = dig_txt("#{dkim_selector}._domainkey.#{dkim_domain}")
-	errors << "#{dkim_selector}._domainkey.#{dkim_domain}: no DKIM key found (needed for invalid DKIM test)" if dkim_record.empty?
+	if dkim_record.empty?
+		errors << "#{dkim_selector}._domainkey.#{dkim_domain}: no DKIM key found (needed for invalid DKIM test)"
+	end
 
 	if (org_domain(spf_pass) == org_domain(dmarc_reject)) && !dmarc_record.include?('aspf=s')
 		errors << "SPF-pass domain (#{spf_pass}) and DMARC-reject domain (#{dmarc_reject}) share " \
@@ -71,142 +120,236 @@ def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
 	errors
 end
 
-def dig_refresh(content)
-	content.gsub(/^\$ dig ((?:\+\S+ )*)(\w+) (\S+)\n[^\n]*/) {
-		type = Regexp.last_match(2)
-		name = Regexp.last_match(3)
-		result, = Open3.capture2('dig', '+short', type, name, err: File::NULL)
-		result = result.strip
-		result = '(no record)' if result.empty?
-		"$ dig +short #{type} #{name}\n#{result}"
-	}
+def generate_test_eml(test, rcpt, target, domain_subs)
+	args = ['./preprocess', '--eval-cmd', 'dig']
+	args << '--force' if test[:force]
+	domain_subs.each { |k, v| args += ['--replace', "#{k}=#{v}"] }
+	args += ['--replace', "from=#{test[:from]}", '--replace', "to=#{rcpt}"]
+	args += [test[:template], target]
+	system(*args)
+	puts "  written: #{target}"
 end
 
-def generate_eml(template_path, target_path, substitutions)
-	content = File.read(template_path)
-	substitutions.each { |old, new_val| content.gsub!(old, new_val) }
-	content = dig_refresh(content)
-	File.write(target_path, content)
-	puts "  written: #{target_path}"
+def build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
+	[
+		{
+			id: 'baseline',
+			comment: 'Check if mail works (+IP reverse lookup, +IP blacklist)',
+			from: "someone@#{helo}",
+			template: 'examples/valid.eml'
+		},
+		{
+			id: 'spf-pass',
+			comment: 'Check if SPF pass is recognized',
+			from: "someone@#{spf_pass}",
+			template: 'examples/spf-pass.eml'
+		},
+		{
+			id: 'spf-hardfail',
+			comment: 'Check if SPF hardfail (-all) is rejected',
+			from: "someone@#{spf_hardfail}",
+			template: 'examples/spf-hardfail.eml'
+		},
+		{
+			id: 'invalid-from',
+			comment: 'Check if From-Address can be bullshit',
+			from: "someone@#{helo}",
+			template: 'examples/invalid-from.eml'
+		},
+		{
+			id: 'dmarc-noalign',
+			comment: 'Check if DMARC reject is checked (no DKIM, MAIL FROM not aligned)',
+			from: "someone@#{helo}",
+			template: 'examples/dmarc-reject.eml'
+		},
+		{
+			id: 'dkim-invalid',
+			comment: 'Check if invalid DKIM is rejected',
+			from: "someone@#{helo}",
+			template: 'examples/dkim-reject.eml',
+			force: true
+		},
+		{
+			id: 'spf-pass-dkim-fail',
+			comment: 'Check if SPF pass without alignment and invalid DKIM triggers DMARC reject',
+			from: "someone@#{spf_pass}",
+			template: 'examples/spf-pass-dkim-fail.eml',
+			force: true
+		},
+		{
+			id: 'spf-pass-no-dkim',
+			comment: 'Check if SPF pass without alignment and missing DKIM triggers DMARC reject',
+			from: "someone@#{spf_pass}",
+			template: 'examples/dmarc-reject.eml'
+		},
+		{
+			id: 'dkim-dual',
+			comment: 'Check if valid DKIM (rsa-sha256 + ed25519-sha256) is accepted',
+			from: 'someone@mgm-sp.team',
+			template: 'examples/dkim-valid.eml'
+		},
+		{
+			id: 'dkim-rsa',
+			comment: 'Check if valid DKIM (rsa-sha256 only) is accepted',
+			from: 'someone@mgm-sp.team',
+			template: 'examples/dkim-rsa.eml'
+		},
+		{
+			id: 'dkim-ed25519',
+			comment: 'Check if valid DKIM (ed25519-sha256 only) is accepted',
+			from: 'someone@mgm-sp.team',
+			template: 'examples/dkim-ed25519.eml'
+		},
+		{
+			id: 'dkim-rsa-sha1',
+			comment: 'Check if DKIM with rsa-sha1 is rejected (RFC 8301)',
+			from: 'someone@mgm-sp.team',
+			template: 'examples/dkim-rsa-sha1.eml'
+		},
+		{
+			id: 'dmarc-strict-align',
+			comment: 'Check if valid DKIM with strict DMARC alignment failure (adkim=s, subdomain) is rejected',
+			from: "someone@#{dmarc_reject}",
+			template: 'examples/dkim-dmarc-strict-fail.eml'
+		},
+		{
+			id: 'dkim-oversign',
+			comment: 'Check if valid oversigned DKIM is accepted',
+			from: 'someone@mgm-sp.team',
+			template: 'examples/dkim-oversign.eml'
+		},
+		{
+			id: 'dkim-from-inject',
+			comment: 'Check if From-header injection (non-oversigned, valid DKIM) is detected',
+			from: 'someone@mgm-sp.team',
+			template: 'examples/dkim-from-injection.eml'
+		},
+		{
+			id: 'eicar',
+			comment: 'Check if recipient has a virus scanner in place',
+			from: "someone@#{helo}",
+			template: 'examples/eicar.eml'
+		}
+	]
 end
 
-# --- Questions ---
-
-rcpt   = ask('Enter a recipient address on the tested server')
-domain = rcpt.split('@').last
-
-mx_hosts = Resolv::DNS.open { |dns|
-	dns.getresources(domain, Resolv::DNS::Resource::IN::MX)
-}.sort_by(&:preference).map { |r| r.exchange.to_s }
-
-if mx_hosts.empty?
-	puts "No MX records found for #{domain}."
-	server = ask('Enter the SMTP server manually')
-else
-	puts "\nMX records for #{domain}:"
-	mx_hosts.each_with_index { |h, i| puts "  #{i + 1}. #{h}" }
-	index  = ask('Select server (number)', '1').to_i - 1
-	index  = index.clamp(0, mx_hosts.size - 1)
-	server = mx_hosts[index]
-end
-
-default_helo = begin
-	ip = UDPSocket.new.tap { |s| s.connect('1.1.1.1', 80) }.addr[3]
-	Resolv.getname(ip).chomp('.')
-rescue StandardError
-	nil
-end || Socket.gethostname
-helo         = ask('HELO hostname', default_helo)
-spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', 'pass.mail.mgm-sp.team')
-spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              'hardfail.mail.mgm-sp.team')
-dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', 'reject.mail.mgm-sp.team')
-puts <<~HINT
- Hint: The DKIM domain needs a TXT record at <selector>._domainkey.<domain>
- with a public key that does NOT match the private key used in the test EML.
- Generate one with:
-   openssl genrsa 2048 | openssl rsa -pubout -outform DER | openssl base64 -A
- Then set the DNS record:
-   <selector>._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<generated-key>"
-HINT
-dkim_domain   = ask('Domain with invalid DKIM key configured', 'mgm-sp.team')
-dkim_selector = ask('Selector for invalid DKIM key', 'random-rsa')
-
-# --- DNS Validation ---
-
-puts "\nChecking DNS records..."
-errors = check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
-if errors.any?
-	puts '  DNS validation failed:'
-	errors.each { |e| puts "  ✗ #{e}" }
-	exit 1
-else
-	puts '  ✓ all records OK'
-end
-
-# --- Generate EML files ---
-
-dir = server
-FileUtils.mkdir_p(dir)
-puts "\nGenerating EML files in #{dir}/..."
-
-generate_eml(
-	'examples/dmarc-reject.eml',
-	"#{dir}/dmarc-reject.eml",
-	{ 'reject.mail.mgm-sp.team' => dmarc_reject }
-)
-generate_eml(
-	'examples/dkim-reject.eml',
-	"#{dir}/dkim-reject.eml",
-	{ 'alcatraz.mgm-sp.team' => dkim_domain }
-)
-generate_eml(
-	'examples/spf-pass-dkim-fail.eml',
-	"#{dir}/spf-pass-dkim-fail.eml",
+def build_domain_subs(spf_pass, dmarc_reject, dkim_domain)
 	{
-		'reject.mail.mgm-sp.team' => dmarc_reject,
-		'pass.mail.mgm-sp.team' => spf_pass,
-		'random-rsa' => dkim_selector
+		'DMARC-REJECT-DOMAIN' => dmarc_reject,
+		'SPF-PASS-DOMAIN' => spf_pass,
+		'DMARC-NONE-DOMAIN' => dkim_domain,
+		'DKIM-DOMAIN' => dkim_domain
 	}
-)
+end
 
-# --- Generate commands ---
+def load_config(path)
+	YAML.load_file(path, symbolize_names: true)
+end
 
-base = "./sendmail --helo #{helo} #{server}"
+def save_config(path, data)
+	File.write(path, data.to_yaml)
+end
 
-tests = [
-	['Check if mail works (+IP reverse lookup, +IP blacklist)',
-		"#{base} someone@#{helo} #{rcpt} examples/valid.eml"],
-	['Check if SPF pass is recognized',
-		"#{base} someone@#{spf_pass} #{rcpt} examples/spf-pass.eml"],
-	['Check if SPF hardfail (-all) is rejected',
-		"#{base} someone@#{spf_hardfail} #{rcpt} examples/spf-hardfail.eml"],
-	['Check if From-Address can be bullshit',
-		"#{base} someone@#{helo} #{rcpt} examples/invalid-from.eml"],
-	['Check if DMARC reject is checked (no DKIM, MAIL FROM not aligned)',
-		"#{base} someone@#{helo} #{rcpt} #{dir}/dmarc-reject.eml"],
-	['Check if invalid DKIM is rejected',
-		"#{base} someone@#{helo} #{rcpt} #{dir}/dkim-reject.eml"],
-	['Check if SPF pass without alignment and invalid DKIM triggers DMARC reject',
-		"#{base} someone@#{spf_pass} #{rcpt} #{dir}/spf-pass-dkim-fail.eml"],
-	['Check if SPF pass without alignment and missing DKIM triggers DMARC reject',
-		"#{base} someone@#{spf_pass} #{rcpt} #{dir}/dmarc-reject.eml"],
-	['Check if valid DKIM (rsa-sha256 + ed25519-sha256) is accepted',
-		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-valid.eml"],
-	['Check if valid DKIM (rsa-sha256 only) is accepted',
-		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-rsa.eml"],
-	['Check if valid DKIM (ed25519-sha256 only) is accepted',
-		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-ed25519.eml"],
-	['Check if DKIM with rsa-sha1 is rejected (RFC 8301)',
-		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-rsa-sha1.eml"],
-	['Check if valid DKIM with strict DMARC alignment failure (adkim=s, subdomain) is rejected',
-		"#{base} someone@#{dmarc_reject} #{rcpt} examples/dkim-dmarc-strict-fail.eml"],
-	['Check if valid oversigned DKIM is accepted',
-		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-oversign.eml"],
-	['Check if From-header injection (non-oversigned, valid DKIM) is detected',
-		"#{base} someone@mgm-sp.team #{rcpt} examples/dkim-from-injection.eml"],
-	['Check if recipient has a virus scanner in place',
-		"#{base} someone@#{helo} #{rcpt} examples/eicar.eml"]
-]
+def show_help(tests, dir)
+	script = File.basename($PROGRAM_NAME)
+	puts "Available tests (#{dir}):"
+	puts
+	tests.each { |t|
+		eml    = "#{dir}/#{t[:id]}.eml"
+		status = File.exist?(eml) ? '✓' : '✗'
+		puts "  #{status} #{t[:id].ljust(20)} #{t[:comment]}"
+	}
+	puts
+	puts "Generate a single test:  #{script} #{dir} <test-id>"
+	puts "Force regeneration:      #{script} #{dir} <test-id> --regenerate"
+	puts "Re-initialize config:    #{script} #{dir} --init"
+end
 
-puts
-tests.each { |comment, command| puts "# #{comment}\n#{command}\n\n" }
+# {{{ Init flow
+def run_init(dir, config_file)
+	FileUtils.mkdir_p(dir)
+	rcpt = ask('Enter a recipient address on the tested server')
+
+	helo = begin
+		ip = UDPSocket.new.tap { |s| s.connect('1.1.1.1', 80) }.addr[3]
+		Resolv.getname(ip).chomp('.')
+	rescue StandardError
+		nil
+	end || Socket.gethostname
+	spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', 'pass.mail.mgm-sp.team')
+	spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              'hardfail.mail.mgm-sp.team')
+	dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', 'reject.mail.mgm-sp.team')
+	puts <<~HINT
+	 Hint: The DKIM domain needs a TXT record at <selector>._domainkey.<domain>
+	 with a public key that does NOT match the private key used in the test EML.
+	 Generate one with:
+	   openssl genrsa 2048 | openssl rsa -pubout -outform DER | openssl base64 -A
+	 Then set the DNS record:
+	   <selector>._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<generated-key>"
+	HINT
+	dkim_domain   = ask('Domain with invalid DKIM key configured', 'mgm-sp.team')
+	dkim_selector = ask('Selector for invalid DKIM key', 'random-rsa')
+
+	# --- DNS Validation ---
+	puts "\nChecking DNS records..."
+	errors = check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
+	if errors.any?
+		puts '  DNS validation failed:'
+		errors.each { |e| puts "  ✗ #{e}" }
+		exit 1
+	else
+		puts '  ✓ all records OK'
+	end
+
+	save_config(config_file, {
+		'rcpt' => rcpt,
+		'helo' => helo,
+		'spf_pass' => spf_pass,
+		'spf_hardfail' => spf_hardfail,
+		'dmarc_reject' => dmarc_reject,
+		'dkim_domain' => dkim_domain,
+		'dkim_selector' => dkim_selector
+	})
+	puts "  Config saved to #{config_file}"
+end
+# }}}
+
+if options.list_tests
+	tests = build_tests('HELO', 'SPF-PASS', 'SPF-HARDFAIL', 'DMARC-REJECT')
+	width = tests.map { |t| t[:id].length }.max
+	tests.each { |t| puts "#{t[:id].ljust(width + 2)}#{t[:comment]}" }
+	exit
+end
+
+# {{{ Main
+run_init(dir, config_file) if !File.exist?(config_file) || options.init
+
+cfg          = load_config(config_file)
+rcpt         = cfg[:rcpt]
+helo         = cfg[:helo]
+spf_pass     = cfg[:spf_pass]
+spf_hardfail = cfg[:spf_hardfail]
+dmarc_reject = cfg[:dmarc_reject]
+dkim_domain  = cfg[:dkim_domain]
+
+tests = build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
+
+if test_id
+	t = tests.find { |x| x[:id] == test_id }
+	abort "Unknown test: #{test_id}\nRun '#{File.basename($PROGRAM_NAME)} #{dir}' for available tests." unless t
+
+	eml = "#{dir}/#{t[:id]}.eml"
+	if File.exist?(eml) && !options.regenerate
+		warn "  Warning: #{eml} already exists. Use --regenerate to overwrite."
+	else
+		generate_test_eml(t, rcpt, eml, build_domain_subs(spf_pass, dmarc_reject, dkim_domain))
+	end
+	if File.exist?(eml) && File.read(eml).end_with?("\r\n")
+		warn "  Warning: #{eml} ends with CRLF — swaks will add an extra blank line before the DATA terminator."
+		warn "    Strip it with: truncate -s -2 #{eml}"
+	end
+	puts "swaks --from #{t[:from]} --to #{rcpt} --data @#{eml}"
+else
+	show_help(tests, dir)
+end
+# }}}
