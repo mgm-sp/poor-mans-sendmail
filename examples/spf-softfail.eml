@@ -11,7 +11,7 @@ This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
 
 The sender domain has a softfail SPF policy:
 
-$ dig +short txt softfail.mail.mgm-sp.team
+$ dig +short txt INSERT-SPF-SOFTFAIL-DOMAIN-VARIABLE
 "v=spf1 a:ile-d-if.mgm-sp.team ~all"
 
 The ~all mechanism causes a softfail for any IP not matching ile-d-if.mgm-sp.team.

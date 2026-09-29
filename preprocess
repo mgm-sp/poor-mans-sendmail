@@ -7,11 +7,12 @@ require 'openssl'
 require 'optparse'
 require 'socket'
 
-Options = Struct.new(:replace, :dkim_key, :force)
+Options = Struct.new(:replace, :dkim_key, :force, :eval_cmds)
 options = Options.new
-options.replace  = {}
-options.dkim_key = {}
-options.force    = false
+options.replace   = {}
+options.dkim_key  = {}
+options.force     = false
+options.eval_cmds = []
 
 optparse = OptionParser.new { |opts|
 	opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} [options] <input.eml> [output.eml]"
@@ -27,6 +28,9 @@ optparse = OptionParser.new { |opts|
 	}
 	opts.on('--force', 'Treat DKIM errors and unresolved placeholders as warnings instead of aborting') {
 		options.force = true
+	}
+	opts.on('--eval-cmd CMD', 'Re-execute "$ CMD ..." lines in body, replacing output until next blank line (repeatable)') { |cmd|
+		options.eval_cmds << cmd
 	}
 
 	opts.on('-h', '--help', 'show this message') {
@@ -63,6 +67,25 @@ replace = {
 }
 replace.merge!(options.replace)
 replace.each { |k, v| content.gsub!("INSERT-#{k}-VARIABLE", v) }
+# }}}
+
+# {{{ Command evaluation
+options.eval_cmds.each do |cmd|
+	content.gsub!(/^(\$ #{Regexp.escape(cmd)} [^\r\n]+)(\r?\n)((?:[^\r\n]+\r?\n)*)/) do
+		cmd_text   = $1
+		eol        = $2
+		old_output = $3
+		full_cmd   = cmd_text.sub(/^\$ /, '')
+		begin
+			new_output = IO.popen(full_cmd.split, 'r', err: %i[child out], &:read).chomp
+			new_output.empty? ? "#{cmd_text}#{eol}" : "#{cmd_text}#{eol}#{new_output}#{eol}"
+		rescue => e
+			msg = "preprocess: eval-cmd failed (#{full_cmd}): #{e.message}"
+			options.force ? warn(msg) : abort(msg)
+			"#{cmd_text}#{eol}#{old_output}"
+		end
+	end
+end
 # }}}
 
 # {{{ DKIM signing

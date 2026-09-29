@@ -11,7 +11,7 @@ This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
 
 The sender domain has a permissive SPF policy:
 
-$ dig +short txt pass.mail.mgm-sp.team
-"v=spf1 a:ile-d-if.mgm-sp.team +all"
+$ dig +short txt INSERT-SPF-PASS-DOMAIN-VARIABLE
+"v=spf1 +all"
 
 The +all mechanism means every sending IP passes SPF.
