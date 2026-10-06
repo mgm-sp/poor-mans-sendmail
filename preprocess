@@ -90,17 +90,17 @@ options.eval_cmds.each { |cmd|
 # }}}
 
 # {{{ DKIM signing
+# RFC 5322: mails use CRLF line endings. parse_email assumes CRLF input and
+# preserves it in header values (folded continuations) and the body.
 def parse_email(text)
-	text = text.gsub("\r\n", "\n")
-	sep       = text.index("\n\n")
+	sep       = text.index("\r\n\r\n")
 	head_text = sep ? text[0...sep] : text
-	body      = sep ? text[(sep + 2)..] : ''
+	body      = sep ? text[(sep + 4)..] : ''
 
 	headers = []
-	head_text.each_line { |line|
-		line = line.chomp
+	head_text.split("\r\n").each { |line|
 		if line =~ /\A[ \t]/ && headers.any?
-			headers.last[1] += "\n#{line}"
+			headers.last[1] += "\r\n#{line}"
 		elsif (m = line.match(/\A([^:]+):(.*)\z/m))
 			headers << [m[1], m[2]]
 		end
@@ -140,7 +140,7 @@ def fold_b64(b64, width: 72)
 		parts << b64[pos, rest_max]
 		pos += rest_max
 	end
-	parts.join("\n ")
+	parts.join("\r\n ")
 end
 
 def sign_dkim(content, dkim_key_overrides, force: false)
@@ -202,8 +202,8 @@ def sign_dkim(content, dkim_key_overrides, force: false)
 		value.gsub!(/\bb=[^;]*/, fold_b64(Base64.strict_encode64(sig)))
 	}
 
-	head_text = headers.map { |n, v| "#{n}:#{v}" }.join("\n")
-	"#{head_text}\n\n#{body}"
+	head_text = headers.map { |n, v| "#{n}:#{v}" }.join("\r\n")
+	"#{head_text}\r\n\r\n#{body}"
 end
 
 content = sign_dkim(content, options.dkim_key, force: options.force)
