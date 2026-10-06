@@ -18,17 +18,17 @@ end
 OptionParser::Switch.prepend(OptparseDashToUnderscore)
 
 # {{{ Options
-Options = Struct.new(:regenerate, :init, :list_tests)
+Options = Struct.new(:regenerate, :config, :list_tests)
 options = Options.new
 options.regenerate = false
-options.init = false
+options.config = false
 options.list_tests = false
 
 optparse = OptionParser.new { |opts|
 	opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} <dir> [test-id] [options]"
 	opts.separator 'Options:'
 	opts.on('--[no-]regenerate', 'Regenerate EML even if it already exists')
-	opts.on('--init', '(Re-)initialize: ask questions, validate DNS, save config (no EML generation)')
+	opts.on('--config', '(Re-)configure: ask questions (existing values as defaults), validate DNS, save config')
 	opts.on('--list-tests', 'List all tests with description (no dir required)')
 	opts.on('-h', '--help', 'show this message') {
 		puts opts
@@ -262,23 +262,26 @@ def show_help(tests, dir)
 	puts
 	puts "Generate a single test:  #{script} #{dir} <test-id>"
 	puts "Force regeneration:      #{script} #{dir} <test-id> --regenerate"
-	puts "Re-initialize config:    #{script} #{dir} --init"
+	puts "Re-configure:            #{script} #{dir} --config"
 end
 
-# {{{ Init flow
-def run_init(dir, config_file)
+# {{{ Config flow
+def run_config(dir, config_file)
 	FileUtils.mkdir_p(dir)
-	rcpt = ask('Enter a recipient address on the tested server')
+	existing = File.exist?(config_file) ? load_config(config_file) : {}
 
-	helo = begin
+	default_helo = begin
 		ip = UDPSocket.new.tap { |s| s.connect('1.1.1.1', 80) }.addr[3]
 		Resolv.getname(ip).chomp('.')
 	rescue StandardError
 		nil
 	end || Socket.gethostname
-	spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', 'pass.mail.mgm-sp.team')
-	spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              'hardfail.mail.mgm-sp.team')
-	dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', 'reject.mail.mgm-sp.team')
+
+	rcpt         = ask('Enter a recipient address on the tested server', existing[:rcpt])
+	helo         = ask('HELO/EHLO hostname', existing[:helo] || default_helo)
+	spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', existing[:spf_pass] || 'pass.mail.mgm-sp.team')
+	spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              existing[:spf_hardfail] || 'hardfail.mail.mgm-sp.team')
+	dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', existing[:dmarc_reject] || 'reject.mail.mgm-sp.team')
 	puts <<~HINT
 	 Hint: The DKIM domain needs a TXT record at <selector>._domainkey.<domain>
 	 with a public key that does NOT match the private key used in the test EML.
@@ -287,8 +290,8 @@ def run_init(dir, config_file)
 	 Then set the DNS record:
 	   <selector>._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<generated-key>"
 	HINT
-	dkim_domain   = ask('Domain with invalid DKIM key configured', 'mgm-sp.team')
-	dkim_selector = ask('Selector for invalid DKIM key', 'random-rsa')
+	dkim_domain   = ask('Domain with invalid DKIM key configured', existing[:dkim_domain] || 'mgm-sp.team')
+	dkim_selector = ask('Selector for invalid DKIM key', existing[:dkim_selector] || 'random-rsa')
 
 	# --- DNS Validation ---
 	puts "\nChecking DNS records..."
@@ -322,7 +325,7 @@ if options.list_tests
 end
 
 # {{{ Main
-run_init(dir, config_file) if !File.exist?(config_file) || options.init
+run_config(dir, config_file) if !File.exist?(config_file) || options.config
 
 cfg          = load_config(config_file)
 rcpt         = cfg[:rcpt]
