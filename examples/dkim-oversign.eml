@@ -1,18 +1,18 @@
-From: <INSERT-FROM-VARIABLE>
-To: <INSERT-TO-VARIABLE>
+From: %FROM_ADDRESS%
+To: %TO_ADDRESS%
 Content-Type: text/plain
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
- s=rsa-2026; d=INSERT-DKIM-DOMAIN-VARIABLE;
+ s=rsa-2026; d=%DKIM-DOMAIN%;
  h=Content-Type:Date:To:From:Subject:Message-ID:
  From:To:Cc:Subject:Date:Message-ID:MIME-Version:References:
  In-Reply-To:Reply-To:Sender:Resent-To:Content-Type:
  Content-Transfer-Encoding;
  bh=FIXME;
  b=FIXME;
-Date: INSERT-DATE-VARIABLE
+Date: %DATE%
 Subject: This is just a valid mail with DKIM Signature to test
  oversigning
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Message-ID: <%MESSAGEID%>
 
 This is just a testmail which has several valid DKIM Header.
 The DKIM-Signature has a lot of additional headers for oversigning
@@ -20,4 +20,4 @@ The DKIM-Signature has a lot of additional headers for oversigning
  From:To:Cc:Subject:Date:Message-ID:MIME-Version:References:
  In-Reply-To:Reply-To:Sender:Resent-To:Content-Type:
  Content-Transfer-Encoding;
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>

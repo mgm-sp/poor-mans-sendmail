@@ -1,7 +1,7 @@
-From: DKIM-Tester <ben.tester@INSERT-DMARC-NONE-DOMAIN-VARIABLE>
+From: DKIM-Tester <ben.tester@%DMARC-NONE-DOMAIN%>
 Content-Type: text/plain
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
- s=nonexistant; d=INSERT-DKIM-DOMAIN-VARIABLE;
+ s=nonexistant; d=%DKIM-DOMAIN%;
  h=Mime-Version:Content-Type:Date:To:From:Subject:Message-ID:Sender:
  Reply-To:Cc:Content-Transfer-Encoding:Content-ID: Content-Description:
  Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc:
@@ -13,10 +13,10 @@ DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
  uRKPUQjS316/fVfiUdYOQgRw2A/Ng4awjrbB3ic9sd 9UevS/fPcqTD8rkhPekStwZg8DiP
  2JnkgzZ2HTizPPOUw+bS0QjValKJiIb3coNTZz7Pf7qTQVbnV 07xGipjZ5HsQwcoTTRPcU
  h9f+EoQiuI/Ck1A9GPrheaCobaAcD6kZ00iiUIuL5VDWeTkhVjAZxr/J HKJFTa+Q==;
-To: <INSERT-TO-VARIABLE>
-Date: INSERT-DATE-VARIABLE
+To: %TO_ADDRESS%
+Date: %DATE%
 Subject: Mail with invalid DKIM Signature
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Message-ID: <%MESSAGEID%>
 
 This mail tests, if DKIM is tested for validity. The mail contains a
 DKIM Signature which is invalid. The mailserver should parse it and
@@ -25,5 +25,5 @@ somehow classify this mail as spam or invalid or other.
 The DMARC policy for the sender is p=none (monitoring only), therefore
 it is not necessary to reject this mail. Some mailserver add a DKIM-Verification Header.
 
-$ dig txt _dmarc.INSERT-DMARC-NONE-DOMAIN-VARIABLE
+$ dig txt _dmarc.%DMARC-NONE-DOMAIN%
 "v=DMARC1; p=none;"

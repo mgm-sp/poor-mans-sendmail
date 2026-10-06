@@ -1,17 +1,17 @@
-From: SPF-Softfail Tester <INSERT-FROM-VARIABLE>
+From: SPF-Softfail Tester <%FROM_ADDRESS%>
 Content-Type: text/plain
-Date: INSERT-DATE-VARIABLE
-To: <INSERT-TO-VARIABLE>
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Date: %DATE%
+To: %TO_ADDRESS%
+Message-ID: <%MESSAGEID%>
 Subject: This mail should be marked as SPF softfail (~all)
 
 This mail tests if the receiving server handles an SPF softfail correctly.
 
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>
 
 The sender domain has a softfail SPF policy:
 
-$ dig +short txt INSERT-SPF-SOFTFAIL-DOMAIN-VARIABLE
+$ dig +short txt %SPF-SOFTFAIL-DOMAIN%
 "v=spf1 ~all"
 
 The ~all mechanism causes a softfail for any sending IP.

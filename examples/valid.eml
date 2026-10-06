@@ -1,9 +1,9 @@
-From: <INSERT-FROM-VARIABLE>
-To: <INSERT-TO-VARIABLE>
+From: %FROM_ADDRESS%
+To: %TO_ADDRESS%
 Subject: This is just a valid mail
-Date: INSERT-DATE-VARIABLE
+Date: %DATE%
 Content-Type: text/plain
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Message-ID: <%MESSAGEID%>
 
 This is just a testmail which has no DKIM Header.
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>

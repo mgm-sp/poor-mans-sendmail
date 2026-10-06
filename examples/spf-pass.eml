@@ -1,17 +1,17 @@
-From: SPF-Pass Tester <INSERT-FROM-VARIABLE>
+From: SPF-Pass Tester <%FROM_ADDRESS%>
 Content-Type: text/plain
-Date: INSERT-DATE-VARIABLE
-To: <INSERT-TO-VARIABLE>
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Date: %DATE%
+To: %TO_ADDRESS%
+Message-ID: <%MESSAGEID%>
 Subject: This mail should pass SPF (+all)
 
 This mail tests if the receiving server recognizes a passing SPF result.
 
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>
 
 The sender domain has a permissive SPF policy:
 
-$ dig +short txt INSERT-SPF-PASS-DOMAIN-VARIABLE
+$ dig +short txt %SPF-PASS-DOMAIN%
 "v=spf1 +all"
 
 The +all mechanism means every sending IP passes SPF.

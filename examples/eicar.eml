@@ -1,8 +1,8 @@
-From: <INSERT-FROM-VARIABLE>
-To: <INSERT-TO-VARIABLE>
-Date: INSERT-DATE-VARIABLE
+From: %FROM_ADDRESS%
+To: %TO_ADDRESS%
+Date: %DATE%
 Content-Type: multipart/mixed; boundary="=-coRYhXON2eS05XAILzko"
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Message-ID: <%MESSAGEID%>
 Subject: A test mail to test if the Virus scanner is active
 
 

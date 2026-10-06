@@ -1,17 +1,17 @@
-From: SPF-Neutral Tester <INSERT-FROM-VARIABLE>
+From: SPF-Neutral Tester <%FROM_ADDRESS%>
 Content-Type: text/plain
-Date: INSERT-DATE-VARIABLE
-To: <INSERT-TO-VARIABLE>
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Date: %DATE%
+To: %TO_ADDRESS%
+Message-ID: <%MESSAGEID%>
 Subject: This mail has a neutral SPF result (?all)
 
 This mail tests how the receiving server handles a neutral SPF result.
 
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>
 
 The sender domain has a neutral SPF policy:
 
-$ dig +short txt INSERT-SPF-NEUTRAL-DOMAIN-VARIABLE
+$ dig +short txt %SPF-NEUTRAL-DOMAIN%
 "v=spf1 ?all"
 
 The ?all mechanism results in a neutral SPF outcome for any sending IP.

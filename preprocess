@@ -18,7 +18,7 @@ optparse = OptionParser.new { |opts|
 	opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} [options] <input.eml> [output.eml]"
 	opts.separator 'Options:'
 
-	opts.on('--replace KEY=VALUE', 'Replace INSERT-KEY-VARIABLE with VALUE (repeatable)') { |kv|
+	opts.on('--replace KEY=VALUE', 'Replace %KEY% with VALUE (repeatable)') { |kv|
 		k, v = kv.split('=', 2)
 		options.replace[k.upcase] = v
 	}
@@ -58,16 +58,19 @@ output_file = ARGV[1]
 
 SCRIPT_DIR = File.dirname(File.realpath($PROGRAM_NAME))
 
+# Tokens that swaks substitutes itself in --data (see man swaks, "DATA
+# OPTIONS"). preprocess leaves these alone unless --replace sets them,
+# so the same template can be fed directly to swaks or fully resolved
+# for sendmail. Update this list if swaks adds/removes tokens.
+SWAKS_TOKENS = %w[FROM_ADDRESS TO_ADDRESS DATE MESSAGEID NEW_HEADERS BODY SWAKS_VERSION NEWLINE].freeze
+
+def scan_tokens(content)
+	content.scan(/%([\w-]+)%/).flatten.uniq
+end
+
 # {{{ Variable substitution
 content = File.read(input_file)
-
-current_time = Time.now
-replace = {
-	'DATE' => current_time.strftime('%a, %d %b %Y %T %z'),
-	'MESSAGEID' => "#{current_time.utc.strftime('%Y%m%d%H%M%S%N')}@#{Socket.gethostname}"
-}
-replace.merge!(options.replace)
-replace.each { |k, v| content.gsub!("INSERT-#{k}-VARIABLE", v) }
+options.replace.each { |k, v| content.gsub!("%#{k}%", v) }
 # }}}
 
 # {{{ Command evaluation
@@ -172,6 +175,13 @@ def sign_dkim(content, dkim_key_overrides, force: false)
 			end
 		end
 
+		leftover = scan_tokens(content) & SWAKS_TOKENS
+		if leftover.any?
+			msg = 'preprocess: cannot DKIM-sign while swaks tokens remain unresolved: ' \
+				"#{leftover.map { |t| "%#{t}%" }.join(', ')} (pass them via --replace)"
+			force ? warn(msg) : abort(msg)
+		end
+
 		bh = body_hash.fetch(hash_alg) { abort "preprocess: unknown hash algorithm: #{hash_alg}" }
 		value.gsub!(/\bbh=[^;]*/, "bh=#{bh}")
 
@@ -209,8 +219,9 @@ end
 content = sign_dkim(content, options.dkim_key, force: options.force)
 # }}}
 
-if content.match?(/INSERT-\w+-VARIABLE/)
-	msg = "preprocess: unresolved placeholder: #{content.match(/INSERT-\w+-VARIABLE/)[0]}"
+unresolved = scan_tokens(content) - SWAKS_TOKENS
+if unresolved.any?
+	msg = "preprocess: unresolved placeholder: %#{unresolved.first}%"
 	options.force ? warn(msg) : abort(msg)
 end
 

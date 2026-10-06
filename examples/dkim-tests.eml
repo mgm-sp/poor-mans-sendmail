@@ -1,29 +1,29 @@
-From: <INSERT-FROM-VARIABLE>
-To: <INSERT-TO-VARIABLE>
+From: %FROM_ADDRESS%
+To: %TO_ADDRESS%
 Content-Type: text/plain
 DKIM-Signature: v=1; a=ed25519-sha256; q=dns/txt; c=relaxed/relaxed;
- s=ed25519-2026; d=INSERT-DKIM-DOMAIN-VARIABLE;
+ s=ed25519-2026; d=%DKIM-DOMAIN%;
  h=Content-Type:Date:To:From:Subject:Message-ID;
  bh=FIXME;
  b=FIXME;
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
- s=rsa-2026; d=INSERT-DKIM-DOMAIN-VARIABLE;
+ s=rsa-2026; d=%DKIM-DOMAIN%;
  h=Content-Type:Date:To:From:Subject:Message-ID;
  bh=FIXME;
  b=FIXME;
 DKIM-Signature: v=1; a=rsa-sha1; q=dns/txt; c=relaxed/relaxed;
- s=rsa-2026; d=INSERT-DKIM-DOMAIN-VARIABLE;
+ s=rsa-2026; d=%DKIM-DOMAIN%;
  h=Content-Type:Date:To:From:Subject:Message-ID;
  bh=FIXME;
  b=FIXME;
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
- s=rsa-2026; d=INSERT-DKIM-DOMAIN-VARIABLE;
+ s=rsa-2026; d=%DKIM-DOMAIN%;
  h=Content-Type:Date:To:From:Subject:Message-ID;
  bh=FIXME;
  b=FIXME;
-Date: INSERT-DATE-VARIABLE
+Date: %DATE%
 Subject: This is just a valid mail with DKIM Signature
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Message-ID: <%MESSAGEID%>
 
 This is just a testmail which has several valid DKIM Header.
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>

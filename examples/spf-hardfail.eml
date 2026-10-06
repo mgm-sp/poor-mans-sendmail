@@ -1,17 +1,17 @@
-From: SPF-Hardfail Tester <INSERT-FROM-VARIABLE>
+From: SPF-Hardfail Tester <%FROM_ADDRESS%>
 Content-Type: text/plain
-Date: INSERT-DATE-VARIABLE
-To: <INSERT-TO-VARIABLE>
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Date: %DATE%
+To: %TO_ADDRESS%
+Message-ID: <%MESSAGEID%>
 Subject: This mail should be rejected due to SPF hardfail (-all)
 
 This mail tests if the receiving server rejects mails with an SPF hardfail.
 
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>
 
 The sender domain has a strict SPF policy:
 
-$ dig +short txt INSERT-SPF-HARDFAIL-DOMAIN-VARIABLE
+$ dig +short txt %SPF-HARDFAIL-DOMAIN%
 "v=spf1 -all"
 
 The -all mechanism causes a hardfail for any sending IP.

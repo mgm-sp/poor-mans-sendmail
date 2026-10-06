@@ -1,23 +1,23 @@
-From: SPF-Pass DKIM-Fail Tester <ben.tester@INSERT-DMARC-REJECT-DOMAIN-VARIABLE>
+From: SPF-Pass DKIM-Fail Tester <ben.tester@%DMARC-REJECT-DOMAIN%>
 Content-Type: text/plain
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
- s=random-rsa; d=INSERT-DMARC-REJECT-DOMAIN-VARIABLE;
+ s=random-rsa; d=%DMARC-REJECT-DOMAIN%;
  h=Content-Type:Date:To:From:Subject:Message-ID;
  bh=zmK1TFVdNxejXl1f7eoudQjb+29HcRM5X5PqUWy/83s=;
  b=invalidsignatureinvalidsignatureinvalidsignatureinvalidsignature==;
-Date: INSERT-DATE-VARIABLE
-To: <INSERT-TO-VARIABLE>
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Date: %DATE%
+To: %TO_ADDRESS%
+Message-ID: <%MESSAGEID%>
 Subject: This mail has SPF pass but invalid DKIM and DMARC reject policy
 
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>
 
-$ dig +short txt INSERT-SPF-PASS-DOMAIN-VARIABLE
+$ dig +short txt %SPF-PASS-DOMAIN%
 "v=spf1 +all"
 
 SPF passes (+all), but the MAIL FROM domain does not align with the From header.
-The DKIM signature for INSERT-DMARC-REJECT-DOMAIN-VARIABLE is invalid.
+The DKIM signature for %DMARC-REJECT-DOMAIN% is invalid.
 Since neither SPF alignment nor DKIM passes, DMARC rejects this mail:
 
-$ dig +short txt _dmarc.INSERT-DMARC-REJECT-DOMAIN-VARIABLE
+$ dig +short txt _dmarc.%DMARC-REJECT-DOMAIN%
 "v=DMARC1; p=reject;"

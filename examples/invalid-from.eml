@@ -1,13 +1,13 @@
 From: invalid <fgibae@gfabefiletpfgiaegb.fglcom>
-To: <INSERT-TO-VARIABLE>
+To: %TO_ADDRESS%
 Subject: This mail contains no valid From-Header
-Date: INSERT-DATE-VARIABLE
+Date: %DATE%
 Content-Type: text/plain
-Message-ID: <INSERT-MESSAGEID-VARIABLE>
+Message-ID: <%MESSAGEID%>
 
 This mail tests, if the mail server checks the From-Header of an e-mail.
 The From header of this mail contains a non-existant domain. The
 mailserver should parse it and somehow classify this mail as spam or
 invalid or other.
 
-This mail was sent with MAIL FROM: <INSERT-FROM-VARIABLE>
+This mail was sent with MAIL FROM: <%FROM_ADDRESS%>

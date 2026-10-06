@@ -124,9 +124,23 @@ def generate_test_eml(test, rcpt, target, domain_subs)
 	args = ['./preprocess', '--eval-cmd', 'dig']
 	args << '--force' if test[:force]
 	domain_subs.each { |k, v| args += ['--replace', "#{k}=#{v}"] }
-	args += ['--replace', "from=#{test[:from]}", '--replace', "to=#{rcpt}"]
+	# DKIM-signed templates must have swaks tokens resolved before signing,
+	# otherwise swaks would later substitute them and break the body hash.
+	# Templates with real DKIM signing carry the "b=FIXME" marker.
+	if File.read(test[:template]).include?('b=FIXME')
+		now = Time.now
+		{
+			'FROM_ADDRESS' => test[:from],
+			'TO_ADDRESS'   => rcpt,
+			'DATE'         => now.strftime('%a, %d %b %Y %T %z'),
+			'MESSAGEID'    => "#{now.utc.strftime('%Y%m%d%H%M%S%N')}@#{Socket.gethostname}"
+		}.each { |k, v| args += ['--replace', "#{k}=#{v}"] }
+	end
 	args += [test[:template], target]
-	system(*args)
+	unless system(*args)
+		warn "  preprocess failed for #{test[:id]} (exit #{$?.exitstatus})"
+		return
+	end
 	puts "  written: #{target}"
 end
 
@@ -347,11 +361,13 @@ if test_id
 	else
 		generate_test_eml(t, rcpt, eml, build_domain_subs(spf_pass, dmarc_reject, dkim_domain))
 	end
-	if File.exist?(eml) && File.read(eml).end_with?("\r\n")
-		warn "  Warning: #{eml} ends with CRLF — swaks will add an extra blank line before the DATA terminator."
-		warn "    Strip it with: truncate -s -2 #{eml}"
+	if File.exist?(eml)
+		if File.read(eml).end_with?("\r\n")
+			warn "  Warning: #{eml} ends with CRLF — swaks will add an extra blank line before the DATA terminator."
+			warn "    Strip it with: truncate -s -2 #{eml}"
+		end
+		puts "swaks --from #{t[:from]} --to #{rcpt} --data @#{eml}"
 	end
-	puts "swaks --from #{t[:from]} --to #{rcpt} --data @#{eml}"
 else
 	show_help(tests, dir)
 end
