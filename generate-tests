@@ -73,30 +73,36 @@ def dig_txt(name)
 	out.strip
 end
 
-def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
+def check_spf(domain, qualifier, label)
+	record = dig_txt(domain)
+	return ["#{domain}: no SPF record found"] unless record.include?('v=spf1')
+	return ["#{domain}: SPF record has no '#{qualifier}all' (#{label}): #{record}"] unless record.include?("#{qualifier}all")
+
+	[]
+end
+
+def check_dns(cfg)
 	errors = []
 
-	spf_pass_record = dig_txt(spf_pass)
-	if !spf_pass_record.include?('v=spf1')
-		errors << "#{spf_pass}: no SPF record found"
-	elsif !spf_pass_record.include?('+all')
-		errors << "#{spf_pass}: SPF record has no '+all' — cannot guarantee pass for arbitrary IPs: #{spf_pass_record}"
+	errors += check_spf(cfg['spf_pass'],     '+', 'pass')
+	errors += check_spf(cfg['spf_hardfail'], '-', 'hardfail')
+	errors += check_spf(cfg['spf_neutral'],  '?', 'neutral')
+	errors += check_spf(cfg['spf_softfail'], '~', 'softfail')
+
+	dmarc_quarantine_record = dig_txt("_dmarc.#{cfg['dmarc_quarantine']}")
+	if dmarc_quarantine_record.empty?
+		errors << "_dmarc.#{cfg['dmarc_quarantine']}: no DMARC record found"
+	elsif !dmarc_quarantine_record.include?('p=quarantine')
+		errors << "_dmarc.#{cfg['dmarc_quarantine']}: DMARC record has no 'p=quarantine': #{dmarc_quarantine_record}"
 	end
 
-	spf_hardfail_record = dig_txt(spf_hardfail)
-	if !spf_hardfail_record.include?('v=spf1')
-		errors << "#{spf_hardfail}: no SPF record found"
-	elsif !spf_hardfail_record.include?('-all')
-		errors << "#{spf_hardfail}: SPF record has no '-all': #{spf_hardfail_record}"
-	end
-
-	dmarc_record = dig_txt("_dmarc.#{dmarc_reject}")
+	dmarc_record = dig_txt("_dmarc.#{cfg['dmarc_reject']}")
 	if dmarc_record.empty?
-		errors << "_dmarc.#{dmarc_reject}: no DMARC record found"
+		errors << "_dmarc.#{cfg['dmarc_reject']}: no DMARC record found"
 	elsif !dmarc_record.include?('p=reject')
-		errors << "_dmarc.#{dmarc_reject}: DMARC record has no 'p=reject': #{dmarc_record}"
+		errors << "_dmarc.#{cfg['dmarc_reject']}: DMARC record has no 'p=reject': #{dmarc_record}"
 	elsif !dmarc_record.include?('adkim=s')
-		errors << "_dmarc.#{dmarc_reject}: no 'adkim=s' — DKIM strict alignment test will not work: #{dmarc_record}"
+		errors << "_dmarc.#{cfg['dmarc_reject']}: no 'adkim=s' — DKIM strict alignment test will not work: #{dmarc_record}"
 	end
 
 	rsa_record = dig_txt('rsa-2026._domainkey.mgm-sp.team')
@@ -105,16 +111,16 @@ def check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
 	ed_record = dig_txt('ed25519-2026._domainkey.mgm-sp.team')
 	errors << 'ed25519-2026._domainkey.mgm-sp.team: no DKIM key found (needed for valid DKIM tests)' if ed_record.empty?
 
-	dkim_record = dig_txt("#{dkim_selector}._domainkey.#{dkim_domain}")
+	dkim_record = dig_txt("#{cfg['dkim_selector']}._domainkey.#{cfg['dkim_domain']}")
 	if dkim_record.empty?
-		errors << "#{dkim_selector}._domainkey.#{dkim_domain}: no DKIM key found (needed for invalid DKIM test)"
+		errors << "#{cfg['dkim_selector']}._domainkey.#{cfg['dkim_domain']}: no DKIM key found (needed for invalid DKIM test)"
 	end
 
-	if (org_domain(spf_pass) == org_domain(dmarc_reject)) && !dmarc_record.include?('aspf=s')
-		errors << "SPF-pass domain (#{spf_pass}) and DMARC-reject domain (#{dmarc_reject}) share " \
-			"the same organizational domain '#{org_domain(dmarc_reject)}'. " \
+	if (org_domain(cfg['spf_pass']) == org_domain(cfg['dmarc_reject'])) && !dmarc_record.include?('aspf=s')
+		errors << "SPF-pass domain (#{cfg['spf_pass']}) and DMARC-reject domain (#{cfg['dmarc_reject']}) share " \
+			"the same organizational domain '#{org_domain(cfg['dmarc_reject'])}'. " \
 			'With relaxed alignment (default), SPF will align and DMARC will pass. ' \
-			"Fix: use a SPF-pass domain from a different org domain, or add aspf=s to _dmarc.#{dmarc_reject}"
+			"Fix: use a SPF-pass domain from a different org domain, or add aspf=s to _dmarc.#{cfg['dmarc_reject']}"
 	end
 
 	errors
@@ -144,7 +150,7 @@ def generate_test_eml(test, rcpt, target, domain_subs)
 	puts "  written: #{target}"
 end
 
-def build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
+def build_tests(helo, domain_subs)
 	[
 		{
 			id: 'baseline',
@@ -155,14 +161,32 @@ def build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
 		{
 			id: 'spf-pass',
 			comment: 'Check if SPF pass is recognized',
-			from: "someone@#{spf_pass}",
+			from: "someone@#{domain_subs['SPF-PASS-DOMAIN']}",
 			template: 'examples/spf-pass.eml'
 		},
 		{
 			id: 'spf-hardfail',
 			comment: 'Check if SPF hardfail (-all) is rejected',
-			from: "someone@#{spf_hardfail}",
+			from: "someone@#{domain_subs['SPF-HARDFAIL-DOMAIN']}",
 			template: 'examples/spf-hardfail.eml'
+		},
+		{
+			id: 'spf-neutral',
+			comment: 'Check how SPF neutral (?all) is handled',
+			from: "someone@#{domain_subs['SPF-NEUTRAL-DOMAIN']}",
+			template: 'examples/spf-neutral.eml'
+		},
+		{
+			id: 'spf-softfail',
+			comment: 'Check how SPF softfail (~all) is handled',
+			from: "someone@#{domain_subs['SPF-SOFTFAIL-DOMAIN']}",
+			template: 'examples/spf-softfail.eml'
+		},
+		{
+			id: 'dmarc-quarantine',
+			comment: 'Check if DMARC quarantine policy triggers spam folder',
+			from: "someone@#{helo}",
+			template: 'examples/dmarc-quarantine.eml'
 		},
 		{
 			id: 'invalid-from',
@@ -186,14 +210,14 @@ def build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
 		{
 			id: 'spf-pass-dkim-fail',
 			comment: 'Check if SPF pass without alignment and invalid DKIM triggers DMARC reject',
-			from: "someone@#{spf_pass}",
+			from: "someone@#{domain_subs['SPF-PASS-DOMAIN']}",
 			template: 'examples/spf-pass-dkim-fail.eml',
 			force: true
 		},
 		{
 			id: 'spf-pass-no-dkim',
 			comment: 'Check if SPF pass without alignment and missing DKIM triggers DMARC reject',
-			from: "someone@#{spf_pass}",
+			from: "someone@#{domain_subs['SPF-PASS-DOMAIN']}",
 			template: 'examples/dmarc-reject.eml'
 		},
 		{
@@ -223,7 +247,7 @@ def build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
 		{
 			id: 'dmarc-strict-align',
 			comment: 'Check if valid DKIM with strict DMARC alignment failure (adkim=s, subdomain) is rejected',
-			from: "someone@#{dmarc_reject}",
+			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
 			template: 'examples/dkim-dmarc-strict-fail.eml'
 		},
 		{
@@ -245,15 +269,6 @@ def build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
 			template: 'examples/eicar.eml'
 		}
 	]
-end
-
-def build_domain_subs(spf_pass, dmarc_reject, dkim_domain)
-	{
-		'DMARC-REJECT-DOMAIN' => dmarc_reject,
-		'SPF-PASS-DOMAIN' => spf_pass,
-		'DMARC-NONE-DOMAIN' => dkim_domain,
-		'DKIM-DOMAIN' => dkim_domain
-	}
 end
 
 def load_config(path)
@@ -291,11 +306,16 @@ def run_config(dir, config_file)
 		nil
 	end || Socket.gethostname
 
-	rcpt         = ask('Enter a recipient address on the tested server', existing[:rcpt])
-	helo         = ask('HELO/EHLO hostname', existing[:helo] || default_helo)
-	spf_pass     = ask('Domain with SPF pass     (v=spf1 +all or IP listed)', existing[:spf_pass] || 'pass.mail.mgm-sp.team')
-	spf_hardfail = ask('Domain with SPF hardfail (v=spf1 -all)',              existing[:spf_hardfail] || 'hardfail.mail.mgm-sp.team')
-	dmarc_reject = ask('Domain with DMARC reject (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', existing[:dmarc_reject] || 'reject.mail.mgm-sp.team')
+	cfg = {
+		'rcpt'             => ask('Enter a recipient address on the tested server', existing[:rcpt]),
+		'helo'             => ask('HELO/EHLO hostname', existing[:helo] || default_helo),
+		'spf_pass'         => ask('Domain with SPF pass     (v=spf1 +all or IP listed)', existing[:spf_pass]     || 'pass.mail.mgm-sp.team'),
+		'spf_hardfail'     => ask('Domain with SPF hardfail (v=spf1 -all)',              existing[:spf_hardfail] || 'hardfail.mail.mgm-sp.team'),
+		'spf_neutral'      => ask('Domain with SPF neutral  (v=spf1 ?all)',              existing[:spf_neutral]  || 'neutral.mail.mgm-sp.team'),
+		'spf_softfail'     => ask('Domain with SPF softfail (v=spf1 ~all)',              existing[:spf_softfail] || 'softfail.mail.mgm-sp.team'),
+		'dmarc_reject'     => ask('Domain with DMARC reject     (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', existing[:dmarc_reject]     || 'reject.mail.mgm-sp.team'),
+		'dmarc_quarantine' => ask('Domain with DMARC quarantine (TXT: "v=DMARC1; p=quarantine;")',             existing[:dmarc_quarantine] || 'quarantine.mail.mgm-sp.team')
+	}
 	puts <<~HINT
 	 Hint: The DKIM domain needs a TXT record at <selector>._domainkey.<domain>
 	 with a public key that does NOT match the private key used in the test EML.
@@ -304,12 +324,12 @@ def run_config(dir, config_file)
 	 Then set the DNS record:
 	   <selector>._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<generated-key>"
 	HINT
-	dkim_domain   = ask('Domain with invalid DKIM key configured', existing[:dkim_domain] || 'mgm-sp.team')
-	dkim_selector = ask('Selector for invalid DKIM key', existing[:dkim_selector] || 'random-rsa')
+	cfg['dkim_domain']   = ask('Domain with invalid DKIM key configured', existing[:dkim_domain] || 'mgm-sp.team')
+	cfg['dkim_selector'] = ask('Selector for invalid DKIM key', existing[:dkim_selector] || 'random-rsa')
 
 	# --- DNS Validation ---
 	puts "\nChecking DNS records..."
-	errors = check_dns(spf_pass, spf_hardfail, dmarc_reject, dkim_domain, dkim_selector)
+	errors = check_dns(cfg)
 	if errors.any?
 		puts '  DNS validation failed:'
 		errors.each { |e| puts "  ✗ #{e}" }
@@ -318,21 +338,13 @@ def run_config(dir, config_file)
 		puts '  ✓ all records OK'
 	end
 
-	save_config(config_file, {
-		'rcpt' => rcpt,
-		'helo' => helo,
-		'spf_pass' => spf_pass,
-		'spf_hardfail' => spf_hardfail,
-		'dmarc_reject' => dmarc_reject,
-		'dkim_domain' => dkim_domain,
-		'dkim_selector' => dkim_selector
-	})
+	save_config(config_file, cfg)
 	puts "  Config saved to #{config_file}"
 end
 # }}}
 
 if options.list_tests
-	tests = build_tests('HELO', 'SPF-PASS', 'SPF-HARDFAIL', 'DMARC-REJECT')
+	tests = build_tests('HELO', Hash.new('<domain>'))
 	width = tests.map { |t| t[:id].length }.max
 	tests.each { |t| puts "#{t[:id].ljust(width + 2)}#{t[:comment]}" }
 	exit
@@ -341,15 +353,19 @@ end
 # {{{ Main
 run_config(dir, config_file) if !File.exist?(config_file) || options.config
 
-cfg          = load_config(config_file)
-rcpt         = cfg[:rcpt]
-helo         = cfg[:helo]
-spf_pass     = cfg[:spf_pass]
-spf_hardfail = cfg[:spf_hardfail]
-dmarc_reject = cfg[:dmarc_reject]
-dkim_domain  = cfg[:dkim_domain]
+cfg = load_config(config_file)
+domain_subs = {
+	'SPF-PASS-DOMAIN'         => cfg[:spf_pass],
+	'SPF-HARDFAIL-DOMAIN'     => cfg[:spf_hardfail],
+	'SPF-NEUTRAL-DOMAIN'      => cfg[:spf_neutral],
+	'SPF-SOFTFAIL-DOMAIN'     => cfg[:spf_softfail],
+	'DMARC-REJECT-DOMAIN'     => cfg[:dmarc_reject],
+	'DMARC-QUARANTINE-DOMAIN' => cfg[:dmarc_quarantine],
+	'DMARC-NONE-DOMAIN'       => cfg[:dkim_domain],
+	'DKIM-DOMAIN'             => cfg[:dkim_domain]
+}
 
-tests = build_tests(helo, spf_pass, spf_hardfail, dmarc_reject)
+tests = build_tests(cfg[:helo], domain_subs)
 
 if test_id
 	t = tests.find { |x| x[:id] == test_id }
@@ -359,14 +375,14 @@ if test_id
 	if File.exist?(eml) && !options.regenerate
 		warn "  Warning: #{eml} already exists. Use --regenerate to overwrite."
 	else
-		generate_test_eml(t, rcpt, eml, build_domain_subs(spf_pass, dmarc_reject, dkim_domain))
+		generate_test_eml(t, cfg[:rcpt], eml, domain_subs)
 	end
 	if File.exist?(eml)
 		if File.read(eml).end_with?("\r\n")
 			warn "  Warning: #{eml} ends with CRLF — swaks will add an extra blank line before the DATA terminator."
 			warn "    Strip it with: truncate -s -2 #{eml}"
 		end
-		puts "swaks --from #{t[:from]} --to #{rcpt} --data @#{eml}"
+		puts "swaks --from #{t[:from]} --to #{cfg[:rcpt]} --data @#{eml}"
 	end
 else
 	show_help(tests, dir)
