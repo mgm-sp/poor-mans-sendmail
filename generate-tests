@@ -151,10 +151,10 @@ def check_dns(cfg)
 	dmarc_record = dig_txt("_dmarc.#{cfg['dmarc_reject']}")
 	if dmarc_record.empty?
 		errors << "_dmarc.#{cfg['dmarc_reject']}: no DMARC record found"
-	elsif !dmarc_record.include?('p=reject')
-		errors << "_dmarc.#{cfg['dmarc_reject']}: DMARC record has no 'p=reject': #{dmarc_record}"
-	elsif !dmarc_record.include?('adkim=s')
-		errors << "_dmarc.#{cfg['dmarc_reject']}: no 'adkim=s' — DKIM strict alignment test will not work: #{dmarc_record}"
+	else
+		errors << "_dmarc.#{cfg['dmarc_reject']}: DMARC record has no 'p=reject': #{dmarc_record}" unless dmarc_record.include?('p=reject')
+		errors << "_dmarc.#{cfg['dmarc_reject']}: no 'adkim=s' — DKIM strict alignment test will not work: #{dmarc_record}" unless dmarc_record.include?('adkim=s')
+		errors << "_dmarc.#{cfg['dmarc_reject']}: no 'aspf=s' — SPF strict alignment cannot be enforced: #{dmarc_record}" unless dmarc_record.include?('aspf=s')
 	end
 
 	# Valid-DKIM keys: signed EMLs use d=cfg['dmarc_reject'] (via %VALID-DKIM-DOMAIN%).
