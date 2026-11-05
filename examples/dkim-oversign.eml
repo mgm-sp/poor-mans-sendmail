@@ -2,7 +2,7 @@ From: %FROM_ADDRESS%
 To: %TO_ADDRESS%
 Content-Type: text/plain
 DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
- s=rsa-2026; d=%DKIM-DOMAIN%;
+ s=rsa-2026; d=%VALID-DKIM-DOMAIN%;
  h=Content-Type:Date:To:From:Subject:Message-ID:
  From:To:Cc:Subject:Date:Message-ID:MIME-Version:References:
  In-Reply-To:Reply-To:Sender:Resent-To:Content-Type:

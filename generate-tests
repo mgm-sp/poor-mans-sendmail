@@ -81,6 +81,24 @@ def check_spf(domain, qualifier, label)
 	[]
 end
 
+def outgoing_public_ip
+	UDPSocket.new.tap { |s| s.connect('1.1.1.1', 80) }.addr[3]
+rescue StandardError
+	nil
+end
+
+# Run spfquery for full RFC 7208 evaluation. Returns the result string:
+# pass / fail / softfail / neutral / none / permerror / temperror,
+# or nil if spfquery is not installed.
+# Uses long options with '=' for portability across spfquery.libspf2 and
+# spfquery.pyspf (both reachable via /usr/bin/spfquery alternatives).
+def spfquery_result(domain, ip)
+	out, _err, _status = Open3.capture3('spfquery', "--ip=#{ip}", "--sender=test@#{domain}")
+	out.lines.first&.strip
+rescue Errno::ENOENT
+	nil
+end
+
 def check_dns(cfg)
 	errors = []
 
@@ -105,22 +123,54 @@ def check_dns(cfg)
 		errors << "_dmarc.#{cfg['dmarc_reject']}: no 'adkim=s' — DKIM strict alignment test will not work: #{dmarc_record}"
 	end
 
-	rsa_record = dig_txt('rsa-2026._domainkey.mgm-sp.team')
-	errors << 'rsa-2026._domainkey.mgm-sp.team: no DKIM key found (needed for valid DKIM tests)' if rsa_record.empty?
+	# Valid-DKIM-Keys: used by dkim-rsa, dkim-ed25519, dkim-dual, dkim-rsa-sha1,
+	# dkim-oversign, dkim-from-inject. All of them sign with d=cfg['dmarc_reject']
+	# (via %VALID-DKIM-DOMAIN%) so DMARC can only pass via DKIM alignment.
+	rsa_valid = dig_txt("rsa-2026._domainkey.#{cfg['dmarc_reject']}")
+	errors << "rsa-2026._domainkey.#{cfg['dmarc_reject']}: no DKIM key found (needed for valid DKIM tests)" if rsa_valid.empty?
 
-	ed_record = dig_txt('ed25519-2026._domainkey.mgm-sp.team')
-	errors << 'ed25519-2026._domainkey.mgm-sp.team: no DKIM key found (needed for valid DKIM tests)' if ed_record.empty?
+	ed_valid = dig_txt("ed25519-2026._domainkey.#{cfg['dmarc_reject']}")
+	errors << "ed25519-2026._domainkey.#{cfg['dmarc_reject']}: no DKIM key found (needed for valid DKIM tests)" if ed_valid.empty?
+
+	# dmarc-strict-align: From=cfg['dmarc_reject'], d=cfg['dkim_domain'] (parent).
+	# Signing requires the key under cfg['dkim_domain'] with selectors rsa-2026/ed25519-2026.
+	rsa_parent = dig_txt("rsa-2026._domainkey.#{cfg['dkim_domain']}")
+	errors << "rsa-2026._domainkey.#{cfg['dkim_domain']}: no DKIM key found (needed for dmarc-strict-align test)" if rsa_parent.empty?
+
+	ed_parent = dig_txt("ed25519-2026._domainkey.#{cfg['dkim_domain']}")
+	errors << "ed25519-2026._domainkey.#{cfg['dkim_domain']}: no DKIM key found (needed for dmarc-strict-align test)" if ed_parent.empty?
 
 	dkim_record = dig_txt("#{cfg['dkim_selector']}._domainkey.#{cfg['dkim_domain']}")
 	if dkim_record.empty?
 		errors << "#{cfg['dkim_selector']}._domainkey.#{cfg['dkim_domain']}: no DKIM key found (needed for invalid DKIM test)"
 	end
 
-	if (org_domain(cfg['spf_pass']) == org_domain(cfg['dmarc_reject'])) && !dmarc_record.include?('aspf=s')
-		errors << "SPF-pass domain (#{cfg['spf_pass']}) and DMARC-reject domain (#{cfg['dmarc_reject']}) share " \
-			"the same organizational domain '#{org_domain(cfg['dmarc_reject'])}'. " \
-			'With relaxed alignment (default), SPF will align and DMARC will pass. ' \
-			"Fix: use a SPF-pass domain from a different org domain, or add aspf=s to _dmarc.#{cfg['dmarc_reject']}"
+	# foreign_spf_pass: envelope MAIL FROM for valid-DKIM tests. Must be a domain
+	# whose SPF authorizes the sender IP, from a different org than cfg['dmarc_reject']
+	# (so relaxed alignment cannot short-circuit DMARC via SPF).
+	fsp = cfg['foreign_spf_pass']
+	fsp_record = dig_txt(fsp)
+	if fsp_record.empty? || !fsp_record.include?('v=spf1')
+		errors << "#{fsp}: no SPF record found (foreign_spf_pass needs v=spf1)"
+	elsif org_domain(fsp) == org_domain(cfg['dmarc_reject'])
+		errors << "foreign_spf_pass (#{fsp}) shares org domain with dmarc_reject (#{cfg['dmarc_reject']}) -- " \
+			'SPF would still align via relaxed alignment. Pick a domain from a different org.'
+	else
+		ip = outgoing_public_ip
+		if ip.nil?
+			errors << 'could not determine outgoing public IP (needed to validate foreign_spf_pass SPF)'
+		else
+			result = spfquery_result(fsp, ip)
+			case result
+			when nil
+				warn "  ! 'spfquery' not installed, skipping SPF IP check for #{fsp}. Install libmail-spf-perl, libspf2-bin, or python3-spf. Record: #{fsp_record}"
+			when 'pass'
+				# ok
+			else
+				errors << "#{fsp}: SPF result '#{result}' for sender IP #{ip}. Record: #{fsp_record}. " \
+					'Fix: adjust SPF to include this IP, or run tests from an authorized host.'
+			end
+		end
 	end
 
 	errors
@@ -195,12 +245,6 @@ def build_tests(helo, domain_subs)
 			template: 'examples/invalid-from.eml'
 		},
 		{
-			id: 'dmarc-noalign',
-			comment: 'Check if DMARC reject is checked (no DKIM, MAIL FROM not aligned)',
-			from: "someone@#{helo}",
-			template: 'examples/dmarc-reject.eml'
-		},
-		{
 			id: 'dkim-invalid',
 			comment: 'Check if invalid DKIM is rejected',
 			from: "someone@#{helo}",
@@ -209,57 +253,64 @@ def build_tests(helo, domain_subs)
 		},
 		{
 			id: 'spf-pass-dkim-fail',
-			comment: 'Check if SPF pass without alignment and invalid DKIM triggers DMARC reject',
-			from: "someone@#{domain_subs['SPF-PASS-DOMAIN']}",
+			comment: 'Check if SPF pass (non-aligned foreign domain) + invalid DKIM triggers DMARC reject',
+			from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/spf-pass-dkim-fail.eml',
 			force: true
 		},
 		{
 			id: 'spf-pass-no-dkim',
-			comment: 'Check if SPF pass without alignment and missing DKIM triggers DMARC reject',
-			from: "someone@#{domain_subs['SPF-PASS-DOMAIN']}",
+			comment: 'Check if SPF pass (non-aligned foreign domain) + missing DKIM triggers DMARC reject',
+			from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dmarc-reject.eml'
 		},
 		{
 			id: 'dkim-dual',
-			comment: 'Check if valid DKIM (rsa-sha256 + ed25519-sha256) is accepted',
-			from: 'someone@mgm-sp.team',
+			comment: 'Check if valid DKIM (rsa-sha256 + ed25519-sha256) is accepted (DKIM-only: SPF non-aligned)',
+			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
+			envelope_from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dkim-valid.eml'
 		},
 		{
 			id: 'dkim-rsa',
-			comment: 'Check if valid DKIM (rsa-sha256 only) is accepted',
-			from: 'someone@mgm-sp.team',
+			comment: 'Check if valid DKIM (rsa-sha256 only) is accepted (DKIM-only: SPF non-aligned)',
+			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
+			envelope_from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dkim-rsa.eml'
 		},
 		{
 			id: 'dkim-ed25519',
-			comment: 'Check if valid DKIM (ed25519-sha256 only) is accepted',
-			from: 'someone@mgm-sp.team',
+			comment: 'Check if valid DKIM (ed25519-sha256 only) is accepted (DKIM-only: SPF non-aligned)',
+			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
+			envelope_from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dkim-ed25519.eml'
 		},
 		{
 			id: 'dkim-rsa-sha1',
-			comment: 'Check if DKIM with rsa-sha1 is rejected (RFC 8301)',
-			from: 'someone@mgm-sp.team',
+			comment: 'Check if DKIM with rsa-sha1 is rejected (RFC 8301); DKIM-only so DMARC fail reaches reject policy',
+			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
+			envelope_from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dkim-rsa-sha1.eml'
 		},
 		{
 			id: 'dmarc-strict-align',
-			comment: 'Check if valid DKIM with strict DMARC alignment failure (adkim=s, subdomain) is rejected',
+			comment: 'Check if valid DKIM with strict DMARC alignment failure (adkim=s, subdomain) is rejected (DKIM-only: SPF non-aligned)',
 			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
+			envelope_from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dkim-dmarc-strict-fail.eml'
 		},
 		{
 			id: 'dkim-oversign',
-			comment: 'Check if valid oversigned DKIM is accepted',
-			from: 'someone@mgm-sp.team',
+			comment: 'Check if valid oversigned DKIM is accepted (DKIM-only: SPF non-aligned)',
+			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
+			envelope_from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dkim-oversign.eml'
 		},
 		{
 			id: 'dkim-from-inject',
-			comment: 'Check if From-header injection (non-oversigned, valid DKIM) is detected',
-			from: 'someone@mgm-sp.team',
+			comment: 'Check if From-header injection (non-oversigned, valid DKIM) is detected; DKIM-only so DMARC fail reaches reject policy',
+			from: "someone@#{domain_subs['DMARC-REJECT-DOMAIN']}",
+			envelope_from: "someone@#{domain_subs['FOREIGN-SPF-PASS-DOMAIN']}",
 			template: 'examples/dkim-from-injection.eml'
 		},
 		{
@@ -313,8 +364,9 @@ def run_config(dir, config_file)
 		'spf_hardfail'     => ask('Domain with SPF hardfail (v=spf1 -all)',              existing[:spf_hardfail] || 'hardfail.mail.mgm-sp.team'),
 		'spf_neutral'      => ask('Domain with SPF neutral  (v=spf1 ?all)',              existing[:spf_neutral]  || 'neutral.mail.mgm-sp.team'),
 		'spf_softfail'     => ask('Domain with SPF softfail (v=spf1 ~all)',              existing[:spf_softfail] || 'softfail.mail.mgm-sp.team'),
-		'dmarc_reject'     => ask('Domain with DMARC reject     (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;")', existing[:dmarc_reject]     || 'reject.mail.mgm-sp.team'),
-		'dmarc_quarantine' => ask('Domain with DMARC quarantine (TXT: "v=DMARC1; p=quarantine;")',             existing[:dmarc_quarantine] || 'quarantine.mail.mgm-sp.team')
+		'dmarc_reject'     => ask('Domain with DMARC reject + valid-DKIM keys (TXT: "v=DMARC1; p=reject; aspf=s; adkim=s;"; needs <selector>._domainkey.<domain>)', existing[:dmarc_reject]     || 'reject.mail.mgm-sp.team'),
+		'dmarc_quarantine' => ask('Domain with DMARC quarantine (TXT: "v=DMARC1; p=quarantine;")',             existing[:dmarc_quarantine] || 'quarantine.mail.mgm-sp.team'),
+		'foreign_spf_pass' => ask('Foreign SPF-pass domain (different org domain, SPF authorizes your sender IP; envelope MAIL FROM for valid-DKIM tests so SPF cannot align)', existing[:foreign_spf_pass] || 'alcatraz.appsec.de')
 	}
 	puts <<~HINT
 	 Hint: The DKIM domain needs a TXT record at <selector>._domainkey.<domain>
@@ -362,7 +414,9 @@ domain_subs = {
 	'DMARC-REJECT-DOMAIN'     => cfg[:dmarc_reject],
 	'DMARC-QUARANTINE-DOMAIN' => cfg[:dmarc_quarantine],
 	'DMARC-NONE-DOMAIN'       => cfg[:dkim_domain],
-	'DKIM-DOMAIN'             => cfg[:dkim_domain]
+	'DKIM-DOMAIN'             => cfg[:dkim_domain],
+	'FOREIGN-SPF-PASS-DOMAIN' => cfg[:foreign_spf_pass],
+	'VALID-DKIM-DOMAIN'       => cfg[:dmarc_reject]
 }
 
 tests = build_tests(cfg[:helo], domain_subs)
@@ -382,7 +436,7 @@ if test_id
 			warn "  Warning: #{eml} ends with CRLF — swaks will add an extra blank line before the DATA terminator."
 			warn "    Strip it with: truncate -s -2 #{eml}"
 		end
-		puts "swaks --from #{t[:from]} --to #{cfg[:rcpt]} --data @#{eml}"
+		puts "swaks --from #{t[:envelope_from] || t[:from]} --to #{cfg[:rcpt]} --data @#{eml}"
 	end
 else
 	show_help(tests, dir)
