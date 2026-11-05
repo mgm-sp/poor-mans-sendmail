@@ -112,10 +112,17 @@ def validate_dkim_key(selector, domain, algo)
 		signed, sign_err, sign_status = Open3.capture3(File.join(script_dir, 'preprocess'), f.path)
 		return "preprocess failed: #{sign_err.strip}" unless sign_status.success?
 
-		out, _err, _status = Open3.capture3('dkimverify', stdin_data: signed)
+		out, err, status = Open3.capture3('dkimverify', stdin_data: signed)
 		return nil if out.include?('signature ok')
 
-		out.strip.empty? ? 'dkimverify: no output' : "dkimverify: #{out.strip}"
+		if err.include?('NaClNotFoundError') || err.include?('pynacl module required')
+			return 'dkimverify lacks pynacl for ed25519 support. Install pynacl into the same env as dkimpy ' \
+				'(e.g. "pipx inject dkimpy pynacl", "pip install pynacl", or distro package python3-nacl)'
+		end
+
+		details = [out.strip, err.strip].reject(&:empty?).join(' | ')
+		details = "empty output, exit=#{status.exitstatus}" if details.empty?
+		"dkimverify: #{details}"
 	}
 rescue Errno::ENOENT
 	:skipped
