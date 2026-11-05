@@ -5,6 +5,7 @@ require 'open3'
 require 'resolv'
 require 'socket'
 require 'fileutils'
+require 'tempfile'
 require 'yaml'
 require 'optparse'
 
@@ -87,6 +88,39 @@ rescue StandardError
 	nil
 end
 
+# End-to-end DKIM validation: build a minimal signed EML for (selector, domain,
+# algo), sign via preprocess (which uses <selector>.key from the script dir),
+# then verify with dkimverify (dkimpy). This catches both missing/mismatched
+# DNS keys and signing-logic regressions.
+# Returns nil on success, an error string on failure, or :skipped if
+# dkimverify is not installed.
+def validate_dkim_key(selector, domain, algo)
+	script_dir = File.dirname(File.realpath($PROGRAM_NAME))
+	eml = +"From: test@example.com\r\n" \
+		"To: test@example.com\r\n" \
+		"Subject: dkim-check\r\n" \
+		"DKIM-Signature: v=1; a=#{algo}; q=dns/txt; c=relaxed/relaxed;\r\n" \
+		" s=#{selector}; d=#{domain};\r\n" \
+		" h=From:To:Subject;\r\n" \
+		" bh=FIXME;\r\n" \
+		" b=FIXME;\r\n" \
+		"\r\n" \
+		"test\r\n"
+	Tempfile.create('dkim-check') { |f|
+		f.write(eml)
+		f.close
+		signed, sign_err, sign_status = Open3.capture3(File.join(script_dir, 'preprocess'), f.path)
+		return "preprocess failed: #{sign_err.strip}" unless sign_status.success?
+
+		out, _err, _status = Open3.capture3('dkimverify', stdin_data: signed)
+		return nil if out.include?('signature ok')
+
+		out.strip.empty? ? 'dkimverify: no output' : "dkimverify: #{out.strip}"
+	}
+rescue Errno::ENOENT
+	:skipped
+end
+
 # Run spfquery for full RFC 7208 evaluation. Returns the result string:
 # pass / fail / softfail / neutral / none / permerror / temperror,
 # or nil if spfquery is not installed.
@@ -123,22 +157,29 @@ def check_dns(cfg)
 		errors << "_dmarc.#{cfg['dmarc_reject']}: no 'adkim=s' — DKIM strict alignment test will not work: #{dmarc_record}"
 	end
 
-	# Valid-DKIM-Keys: used by dkim-rsa, dkim-ed25519, dkim-dual, dkim-rsa-sha1,
-	# dkim-oversign, dkim-from-inject. All of them sign with d=cfg['dmarc_reject']
-	# (via %VALID-DKIM-DOMAIN%) so DMARC can only pass via DKIM alignment.
-	rsa_valid = dig_txt("rsa-2026._domainkey.#{cfg['dmarc_reject']}")
-	errors << "rsa-2026._domainkey.#{cfg['dmarc_reject']}: no DKIM key found (needed for valid DKIM tests)" if rsa_valid.empty?
-
-	ed_valid = dig_txt("ed25519-2026._domainkey.#{cfg['dmarc_reject']}")
-	errors << "ed25519-2026._domainkey.#{cfg['dmarc_reject']}: no DKIM key found (needed for valid DKIM tests)" if ed_valid.empty?
-
-	# dmarc-strict-align: From=cfg['dmarc_reject'], d=cfg['dkim_domain'] (parent).
-	# Signing requires the key under cfg['dkim_domain'] with selectors rsa-2026/ed25519-2026.
-	rsa_parent = dig_txt("rsa-2026._domainkey.#{cfg['dkim_domain']}")
-	errors << "rsa-2026._domainkey.#{cfg['dkim_domain']}: no DKIM key found (needed for dmarc-strict-align test)" if rsa_parent.empty?
-
-	ed_parent = dig_txt("ed25519-2026._domainkey.#{cfg['dkim_domain']}")
-	errors << "ed25519-2026._domainkey.#{cfg['dkim_domain']}: no DKIM key found (needed for dmarc-strict-align test)" if ed_parent.empty?
+	# Valid-DKIM keys: signed EMLs use d=cfg['dmarc_reject'] (via %VALID-DKIM-DOMAIN%).
+	# dmarc-strict-align uses d=cfg['dkim_domain'] (parent org).
+	# For each (selector, domain, algo), do an end-to-end sign+verify to catch
+	# both missing DNS records and public/private-key mismatches.
+	dkim_targets = [
+		['rsa-2026',     cfg['dmarc_reject'], 'rsa-sha256',     'valid DKIM tests'],
+		['ed25519-2026', cfg['dmarc_reject'], 'ed25519-sha256', 'valid DKIM tests'],
+		['rsa-2026',     cfg['dkim_domain'],  'rsa-sha256',     'dmarc-strict-align test'],
+		['ed25519-2026', cfg['dkim_domain'],  'ed25519-sha256', 'dmarc-strict-align test']
+	]
+	skipped = false
+	dkim_targets.each { |selector, domain, algo, purpose|
+		result = validate_dkim_key(selector, domain, algo)
+		case result
+		when nil
+			# ok
+		when :skipped
+			skipped = true
+		else
+			errors << "#{selector}._domainkey.#{domain}: #{result} (needed for #{purpose})"
+		end
+	}
+	warn "  ! 'dkimverify' not installed, skipping DKIM key validation. Install python3-dkim or pipx install dkimpy." if skipped
 
 	dkim_record = dig_txt("#{cfg['dkim_selector']}._domainkey.#{cfg['dkim_domain']}")
 	if dkim_record.empty?
